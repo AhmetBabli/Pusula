@@ -1,0 +1,190 @@
+const API_BASE = '/api';
+
+/**
+ * Gelişmiş Fetch Sarmalayıcısı
+ */
+const request = async (endpoint, options = {}) => {
+  // 1. Yapılandırma ve Varsayılan Header'lar
+  const config = {
+    ...options,
+    headers: { ...options.headers },
+    // Cookie bazlı oturum (Session) kullanıyorsan aşağıdaki satırı açmalısın:
+    // credentials: 'include',
+  };
+
+  // Oturum token'ı varsa her isteğe otomatik ekle
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // 2. Query Parametrelerini Dinamik ve Güvenli Oluşturma
+  let url = `${API_BASE}${endpoint}`;
+  if (options.params) {
+    // Sadece değeri olan (null/undefined olmayan) parametreleri filtrele
+    const cleanParams = Object.fromEntries(
+      Object.entries(options.params).filter(([_, v]) => v != null)
+    );
+    const query = new URLSearchParams(cleanParams).toString();
+    if (query) url += `?${query}`;
+  }
+
+  // 3. JSON Body Formatlaması (FormData istisnası ile)
+  if (config.body && !(config.body instanceof FormData)) {
+    config.headers['Content-Type'] = 'application/json';
+    config.body = JSON.stringify(config.body);
+  }
+
+  // 4. Zaman Aşımı (Timeout) Kontrolü (10 saniye)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  config.signal = controller.signal;
+
+  try {
+    const res = await fetch(url, config);
+    clearTimeout(timeoutId); // İstek başarılıysa sayacı durdur
+
+    // Hata Yönetimi
+    if (!res.ok) {
+      // Oturum geçersiz/süresi dolmuş: token'ı temizle, sonraki reload'da giriş ekranına düşsün
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+      }
+      const errorData = await res.json().catch(() => ({}));
+      const msg = errorData.detail || errorData.message || `API Hatası: ${res.status}`;
+      throw new Error(msg);
+    }
+    
+    // 204 No Content Yönetimi
+    if (res.status === 204) return null;
+    
+    // 5. Güvenli Response Parse (Sadece JSON ise json parse et)
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await res.json();
+    }
+    
+    return await res.text(); // JSON değilse düz metin veya blob dön
+    
+  } catch (error) {
+    // Timeout hatasını özelleştirme
+    if (error.name === 'AbortError') {
+      console.error(`[API TIMEOUT] ${url} isteği zaman aşımına uğradı.`);
+      throw new Error('Sunucu yanıt vermiyor. Lütfen bağlantınızı kontrol edin.');
+    }
+    
+    console.error(`[API ERROR] ${url}:`, error.message);
+    throw error;
+  }
+};
+
+// ── Kimlik Doğrulama ──
+export const login = async (email, password) => {
+  const data = await request('/auth/login', { method: 'POST', body: { email, password } });
+  localStorage.setItem('token', data.access_token);
+  return data;
+};
+
+export const register = async (email, password, full_name) => {
+  const data = await request('/auth/register', { method: 'POST', body: { email, password, full_name } });
+  localStorage.setItem('token', data.access_token);
+  return data;
+};
+
+export const loginWithGoogle = async (code) => {
+  const data = await request('/auth/google', { method: 'POST', body: { code } });
+  localStorage.setItem('token', data.access_token);
+  return data;
+};
+
+export const logout = () => {
+  localStorage.removeItem('token');
+};
+
+export const getToken = () => localStorage.getItem('token');
+
+// ── GET Istekleri ──
+export const getJobs = () => request('/jobs/');
+export const getInboxItems = () => request('/inbox/items');
+export const getCVs = () => request('/cvs/');
+export const getProfile = () => request('/users/profile');
+export const getAccounts = () => request('/inbox/accounts');
+export const getEvents = () => request('/events/');
+export const getDashboardStats = () => request('/dashboard/stats');
+
+// Artık params objesi kullanıyoruz. status undefined ise URL bozulmaz.
+export const getApplications = (status) => request('/applications/', { 
+  params: { status } 
+});
+
+// ── POST Istekleri ──
+// syncJobs artık { task_id, status } döndürüyor — useTaskStream ile SSE takibi yap
+export const syncJobs = () => request('/jobs/sync', { method: 'POST' });
+export const syncInbox = () => request('/inbox/sync', { method: 'POST' });
+export const linkEmailAccount = (email, app_password) => request('/inbox/accounts', {
+  method: 'POST',
+  body: { email, app_password }
+});
+export const sendColdEmail = (company_name) => request('/outreach/cold-email', {
+  method: 'POST',
+  body: { company_name }
+});
+
+// ── Job işlemleri ──
+export const matchJob = (job_id, cv_id = null) => request(`/jobs/${job_id}/match`, {
+  method: 'POST',
+  params: cv_id ? { cv_id } : {},
+});
+export const toggleFavorite = (job_id) => request(`/jobs/${job_id}/favorite`, { method: 'PATCH' });
+export const updateJobStatus = (job_id, status) => request(`/jobs/${job_id}/status`, {
+  method: 'PATCH',
+  body: { status },
+});
+
+// ── CV işlemleri ──
+export const triggerAtsAnalysis = (cv_id) => request(`/cvs/${cv_id}/ats-analyze`, { method: 'POST' });
+export const generateCv = (data) => request('/cvs/generate', { method: 'POST', body: data });
+
+// ── PATCH Istekleri ──
+export const updateProfile = (data) => request('/users/profile', {
+  method: 'PATCH',
+  body: data
+});
+export const approveApplication = (app_id, approved, notes = null, contact_email = null) => request(`/applications/${app_id}/approve`, {
+  method: 'POST', // Backend POST bekliyorsa burada POST kalmalı, ancak genelde approve işlemleri PATCH olur
+  body: { approved, notes, contact_email }
+});
+
+// ── FormData Istekleri ──
+export const uploadCV = (file, title, variant) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('title', title);
+  formData.append('variant_type', variant);
+  
+  return request('/cvs/upload', { 
+    method: 'POST', 
+    body: formData 
+  });
+};
+
+// ── Detay Istekleri ──
+export const getJobDetail = (id) => request(`/jobs/${id}`);
+export const getCVDetail = (id) => request(`/cvs/${id}`);
+
+// ── CV Varsayılan Ayarla ──
+export const setDefaultCV = (id) => request(`/cvs/${id}/set-default`, { method: 'PATCH' });
+
+// ── Başvuru Hazırla ──
+export const prepareApplication = (job_id, cv_id = null) => request('/applications/prepare', {
+  method: 'POST',
+  body: { job_id, cv_id }
+});
+
+// ── Başvuru Gönder (onaylanmış başvuruyu gönderime çevir) ──
+export const submitApplication = (app_id) => request(`/applications/${app_id}/submit`, {
+  method: 'POST',
+});
+
+// ── DELETE Istekleri ──
+export const deleteCV = (id) => request(`/cvs/${id}`, { method: 'DELETE' });

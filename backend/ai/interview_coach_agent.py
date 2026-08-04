@@ -1,0 +1,152 @@
+"""
+Kariyer Ajanı 2.0 — Interview Coach Agent
+Şirkete özel teknik/IK soru üretimi + cevap değerlendirmesi.
+"""
+import json
+import logging
+from typing import Literal
+import google.generativeai as genai
+from backend.config import settings
+
+logger = logging.getLogger("InterviewCoachAgent")
+
+# Şirket kültürü veritabanı — mülakat ağırlıkları
+COMPANY_PROFILES: dict[str, dict] = {
+    "baykar": {
+        "style": "teknik-ağırlıklı, mühendislik odaklı",
+        "focus": ["C/C++", "gömülü sistemler", "algoritma", "matematik", "problem çözme"],
+        "hr_style": "milliyetçi değerler, sorumluluk bilinci, disiplin",
+    },
+    "turkcell": {
+        "style": "vaka analizi ağırlıklı, iş odaklı",
+        "focus": ["telekomunikasyon", "dijital dönüşüm", "müşteri deneyimi", "ürün yönetimi"],
+        "hr_style": "liderlik, inovasyon, müşteri odaklılık",
+    },
+    "trendyol": {
+        "style": "hız, ölçek, veri odaklı",
+        "focus": ["sistem tasarımı", "mikroservisler", "veri yapıları", "SQL optimizasyonu"],
+        "hr_style": "ownership, büyüme zihniyeti, sonuç odaklılık",
+    },
+    "default": {
+        "style": "dengeli teknik + IK",
+        "focus": ["problem çözme", "takım çalışması", "teknoloji", "proje yönetimi"],
+        "hr_style": "iletişim, uyum, öğrenme hızı",
+    },
+}
+
+
+def _get_company_profile(company_name: str) -> dict:
+    key = company_name.lower().strip()
+    for k, v in COMPANY_PROFILES.items():
+        if k in key:
+            return v
+    return COMPANY_PROFILES["default"]
+
+
+async def generate_questions(
+    job_title: str,
+    job_description: str,
+    company_name: str,
+    round_type: Literal["technical", "hr", "mixed"] = "mixed",
+    count: int = 5,
+    user_context: str = "",
+) -> list[dict]:
+    """
+    Şirket kültürüne + ilan içeriğine + adayın profiline uygun mülakat soruları üretir.
+    Returns: [{"id": 1, "question": "...", "type": "technical|hr", "hint": "..."}]
+    """
+    profile = _get_company_profile(company_name)
+
+    type_instruction = {
+        "technical": f"Sadece teknik sorular üret. Odak: {', '.join(profile['focus'][:4])}",
+        "hr": f"Sadece IK/davranışsal sorular üret. Tarz: {profile['hr_style']}",
+        "mixed": f"Karışık: {count//2} teknik, {count - count//2} IK sorusu.",
+    }[round_type]
+
+    prompt = f"""Sen deneyimli bir {company_name} mülakatçısısın.
+Şirket kültürü: {profile['style']}
+
+Pozisyon: {job_title}
+İlan Özeti: {job_description[:500]}
+
+{user_context}
+
+Adayın yeteneklerine ve CV'sine atıfta bulunarak (örneğin "CV'nizde belirttiğiniz X yeteneği" diyerek) soruları kişiselleştirin.
+{type_instruction}
+
+Her soru için şu JSON formatını kullan:
+[
+  {{
+    "id": 1,
+    "question": "Soru metni",
+    "type": "technical" veya "hr",
+    "hint": "İyi bir cevabın içermesi gereken anahtar noktalar (gizli, kullanıcıya gösterilmez)"
+  }}
+]
+
+SADECE JSON döndür, açıklama ekleme. {count} soru üret."""
+
+    try:
+        model = genai.GenerativeModel(
+            settings.GEMINI_MODEL,
+            generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+        )
+        response = await model.generate_content_async(prompt)
+        questions = json.loads(response.text)
+        logger.info(f"[InterviewCoach] {len(questions)} soru üretildi.")
+        return questions
+    except Exception as e:
+        logger.error(f"[InterviewCoach] Soru üretim hatası: {e}")
+        return [
+            {"id": 1, "question": f"{job_title} pozisyonu için kendinizi tanıtır mısınız?",
+             "type": "hr", "hint": "Deneyim, motivasyon, hedefler"}
+        ]
+
+
+async def evaluate_answer(
+    question: str,
+    answer: str,
+    question_type: str,
+    hint: str,
+    job_title: str,
+    company_name: str,
+) -> dict:
+    """
+    Kullanıcının cevabını değerlendirir.
+    Returns: {"score": 75, "feedback": "...", "strengths": [...], "improvements": [...]}
+    """
+    prompt = f"""Sen bir {company_name} kıdemli mülakatçısısın.
+
+Pozisyon: {job_title}
+Soru: {question}
+Beklenen anahtar noktalar (dahili): {hint}
+
+Aday Cevabı: {answer[:800]}
+
+Cevabı değerlendir. JSON formatında döndür:
+{{
+  "score": <0-100 arası puan>,
+  "feedback": "<genel değerlendirme, 2-3 cümle>",
+  "strengths": ["<güçlü nokta 1>", "<güçlü nokta 2>"],
+  "improvements": ["<geliştirme önerisi 1>", "<geliştirme önerisi 2>"],
+  "model_answer_hint": "<ideal cevabın içermesi gereken 1-2 anahtar nokta>"
+}}"""
+
+    try:
+        model = genai.GenerativeModel(
+            settings.GEMINI_MODEL,
+            generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+        )
+        response = await model.generate_content_async(prompt)
+        result = json.loads(response.text)
+        result["score"] = max(0, min(100, int(result.get("score", 50))))
+        return result
+    except Exception as e:
+        logger.error(f"[InterviewCoach] Cevap değerlendirme hatası: {e}")
+        return {
+            "score": 50,
+            "feedback": "Değerlendirme şu an yapılamıyor.",
+            "strengths": ["Cevap verildi"],
+            "improvements": ["Daha fazla detay eklenebilir"],
+            "model_answer_hint": "Tekrar deneyin.",
+        }

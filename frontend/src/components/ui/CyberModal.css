@@ -1,0 +1,141 @@
+.cyber-modal-overlay {
+  position: fixed;
+  inset: 0;
+  /* width: 100% ve height: 100% gereksizdir, inset: 0 her yeri kaplar */
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  padding: 24px 24px 80px;
+  box-sizing: border-box;
+  overflow-y: auto;
+
+  /* Flexbox Centering Bug Çözümü:
+     Ortalamayı 'align-items' ile değil, child elemanda 'margin: auto' ile yapacağız. */
+  display: flex;
+
+  /* both yerine forwards yeterlidir */
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.cyber-modal-content {
+  /* Sihirli Dokunuş: Flex container içinde elementi kusursuz ortalar.
+     İçerik ekrandan uzunsa üstten kesilmesini KESİNLİKLE engeller. */
+  margin: auto;
+
+  background: rgb(var(--color-surface-container));
+  border: 1px solid rgb(var(--color-outline-variant) / 0.1);
+  border-radius: 10px;
+
+  /* Kodu sadeleştirdik */
+  width: 100%;
+  max-width: 900px;
+
+  /* Mobil Safari/Chrome adres çubuğu (URL bar) çakışması için 'dvh' (Dynamic Viewport Height) */
+  max-height: calc(100dvh - 80px);
+
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+
+  /* Animasyon başlamadan GPU'da yer ayırtıyoruz */
+  will-change: transform, opacity;
+  animation: modalScaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalScaleUp {
+  from { transform: scale(0.98) translateY(6px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cyber-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 28px;
+  border-bottom: 1px solid rgb(var(--color-outline-variant) / 0.1);
+  flex-shrink: 0;
+}
+
+.cyber-modal-title {
+  color: rgb(var(--color-on-surface));
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  margin: 0;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 50px);
+}
+
+.cyber-modal-close {
+  background: rgb(var(--color-outline-variant) / 0.1);
+  border: none;
+  color: rgb(var(--color-on-surface-variant));
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cyber-modal-close:hover {
+  background: rgb(var(--color-primary-container));
+  color: rgb(var(--color-on-primary));
+}
+
+.cyber-modal-close:active {
+  transform: scale(0.92);
+}
+
+.cyber-modal-body {
+  padding: 24px 28px;
+  overflow-y: auto;
+  color: rgb(var(--color-on-surface));
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.7;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Modal Scrollbar */
+.cyber-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+.cyber-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cyber-modal-body::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-outline-variant) / 0.2);
+  border-radius: 10px;
+}
+.cyber-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-primary-container));
+}
+
+/* Küçük ekranlar için ek düzenleme */
+@media (max-width: 600px) {
+  .cyber-modal-overlay {
+    padding: 10px 10px 80px 10px;
+  }
+  .cyber-modal-header {
+    padding: 16px 20px;
+  }
+  .cyber-modal-body {
+    padding: 16px 20px;
+  }
+  .cyber-modal-title {
+    font-size: 1.1rem;
+  }
+}

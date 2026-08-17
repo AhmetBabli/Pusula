@@ -262,3 +262,41 @@ def test_answer_questions_rejects_empty_list(client, db_session, monkeypatch):
 
     res = client.post(f"/api/applications/{app_id}/answer-questions", json={"questions": []}, headers=headers)
     assert res.status_code == 422
+
+
+def test_submit_is_rate_limited_after_ten_per_hour(client, db_session, monkeypatch):
+    """Regresyon testi: /submit gerçek bir e-posta gönderir, bu yüzden bir
+    istemci hatası/döngüsü aynı IP'den onlarca gerçek e-posta göndermemeli.
+    10/saat sonrası 429 dönmeli, önceki dokuz gönderim gerçek 200 almalı."""
+    headers = _auth_headers(client)
+    user, cv, _ = _seed_cv_and_job(db_session, "apptest@example.com")
+    _mock_letter_and_email(monkeypatch)
+    account = EmailAccount(user_id=user.id, email="sender@example.com")
+    account.app_password = "fake-app-password"
+    db_session.add(account)
+    db_session.commit()
+    monkeypatch.setattr(
+        "backend.automation.outreach_agent.OutreachAgent.send_via_account",
+        lambda **kwargs: True,
+    )
+
+    for i in range(11):
+        job = Job(
+            source="kariyer_net",
+            source_url=f"https://example.com/ilan/rate-{i}",
+            title="Yazılım Stajyeri",
+            company="Test A.Ş.",
+            description="Başvurular için iletişim: ik@sirket.com",
+        )
+        db_session.add(job)
+        db_session.commit()
+        db_session.refresh(job)
+
+        app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]
+        client.post(f"/api/applications/{app_id}/approve", json={"approved": True}, headers=headers)
+
+        res = client.post(f"/api/applications/{app_id}/submit", headers=headers)
+        if i < 10:
+            assert res.status_code == 200, res.text
+        else:
+            assert res.status_code == 429

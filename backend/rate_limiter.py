@@ -11,9 +11,16 @@ from fastapi.responses import JSONResponse
 logger = logging.getLogger("KariyerAjani.RateLimit")
 
 # Initialize rate limiter
+# key_style="endpoint": slowapi varsayılan olarak "url" kullanır, yani
+# /applications/1/submit ve /applications/2/submit gibi path parametresi
+# içeren rotalarda her farklı ID kendi ayrı sayacına sahip olur — limit
+# gerçekte hiç dolmaz. "endpoint" ile sayaç, çözülmüş URL yerine rotayı
+# işleyen view fonksiyonuna göre tutulur, böylece {app_id} farklı olsa da
+# aynı uç noktaya yapılan tüm istekler tek bir sayaçta birikir.
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["100/hour", "20/minute"],  # Global defaults
+    key_style="endpoint",
 )
 
 

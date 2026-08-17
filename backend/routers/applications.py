@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -13,6 +13,7 @@ from backend.models.user import UserProfile
 from backend.models.inbox import EmailAccount
 from backend.automation.outreach_agent import OutreachAgent
 from backend.auth import get_current_user
+from backend.rate_limiter import limiter
 
 router = APIRouter(prefix="/applications", tags=["Başvurular"])
 
@@ -109,7 +110,9 @@ def list_applications(
     return result
 
 @router.post("/prepare")
+@limiter.limit("20/hour")
 async def prepare_application(
+    request: Request,
     req: CreateApplicationRequest,
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
@@ -228,7 +231,9 @@ def approve_application(
         return {"message": "Başvuru reddedildi. Düzenleyebilirsiniz.", "status": "draft"}
 
 @router.post("/{app_id}/answer-questions")
+@limiter.limit("20/hour")
 async def answer_custom_questions(
+    request: Request,
     app_id: int,
     req: CustomQARequest,
     db: Session = Depends(get_db),
@@ -272,7 +277,9 @@ async def answer_custom_questions(
     return {"qa_answers": app.qa_answers}
 
 @router.post("/{app_id}/submit")
+@limiter.limit("10/hour")
 def submit_application(
+    request: Request,
     app_id: int,
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),

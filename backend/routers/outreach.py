@@ -3,7 +3,7 @@ from typing import Optional
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,7 @@ from backend.models.outreach import OutreachRequest
 from backend.automation.outreach_agent import OutreachAgent
 from backend.ai.gemini_client import generate_cold_email
 from backend.auth import get_current_user
+from backend.rate_limiter import limiter
 
 router = APIRouter(prefix="/outreach", tags=["Outreach"])
 logger = logging.getLogger(__name__)
@@ -58,7 +59,9 @@ def _default_cv(db: Session, user_id: int) -> CV:
 
 
 @router.post("/prepare", response_model=OutreachOut)
+@limiter.limit("20/hour")
 async def prepare_outreach(
+    request: Request,
     req: ColdEmailRequest,
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
@@ -102,7 +105,9 @@ async def prepare_outreach(
 
 
 @router.post("/{outreach_id}/send", response_model=OutreachOut)
+@limiter.limit("10/hour")
 async def send_outreach(
+    request: Request,
     outreach_id: int,
     req: SendRequest,
     db: Session = Depends(get_db),

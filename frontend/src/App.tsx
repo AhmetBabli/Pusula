@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { MotionConfig } from 'framer-motion';
 import { Sun, Moon, Globe } from 'lucide-react';
 import { useLanguage } from './i18n/LanguageContext';
 import { useTheme } from './contexts/ThemeContext';
@@ -465,13 +466,15 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-surface">
-      {currentState !== 'dashboard' && <CornerControls />}
-      {renderContent()}
-      <Footer />
+    <MotionConfig reducedMotion="user">
+      <div className="relative min-h-screen bg-surface">
+        {currentState !== 'dashboard' && <CornerControls />}
+        {renderContent()}
+        <Footer />
 
-      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
-    </div>
+        <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      </div>
+    </MotionConfig>
   );
 };
 

@@ -79,3 +79,17 @@ body {
   transition: transform 0.6s cubic-bezier(.34, 1.56, .64, 1);
 }
 
+/* ── Hareket azaltma tercihi ──
+   framer-motion animasyonları App.tsx'teki <MotionConfig reducedMotion="user">
+   ile zaten OS tercihine uyuyor; burada geriye kalan saf CSS animasyon/geçişleri
+   (maskot bob/blink, Tailwind'in animate-pulse/animate-spin'i, sayfa fadeIn'i,
+   hover/active geçişleri) aynı tercihe bağlanıyor. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

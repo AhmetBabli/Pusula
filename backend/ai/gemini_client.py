@@ -1,6 +1,7 @@
 import json
 import logging
 import asyncio
+import re
 from typing import List, Optional
 
 from google import genai
@@ -420,6 +421,105 @@ Adayın CV'si:
     except Exception as e:
         logger.error(f"Soğuk e-posta oluşturulamadı: {type(e).__name__} - {e}")
         return "[Hata] E-posta üretim servisine şu an ulaşılamıyor. Lütfen daha sonra tekrar deneyin."
+
+
+async def find_alumni_referrals(
+    company_name: str,
+    university: str,
+    target_role: str,
+    user_name: str,
+    api_key: Optional[str] = None,
+) -> List[dict]:
+    """Hedef şirkette aynı üniversiteden çalışan kişileri arar (Gemini +
+    Google Search grounding, hunt_email ile aynı desen) ve her biri için
+    kısa bir referans-isteme mesajı taslağı üretir.
+
+    LinkedIn API erişimimiz olmadığı için (mesaj gönderimi mümkün değil)
+    kesin/doğrulanmış bir profil URL'i İDDİA ETMİYORUZ — sonuç, kullanıcının
+    LinkedIn'de kendisi arayıp doğrulayacağı bir isim/unvan + arama ipucudur.
+    Model halüsinasyon yapabilir, bu yüzden çağıran taraf (frontend) sonucu
+    her zaman "doğrula" uyarısıyla göstermeli."""
+    effective_key = api_key or settings.GEMINI_API_KEY
+    if not effective_key:
+        return []
+
+    prompt = f"""Google araması kullanarak "{company_name}" şirketinde çalışan,
+"{university}" mezunu kişileri bul — mümkünse "{target_role}" pozisyonuna
+yakın bir rolde olanları önceliklendir.
+
+Kurallar:
+- SADECE gerçekten bulduğun, makul güvenle eminsen kişileri listele.
+  Hiç kimse bulamazsan boş bir liste döndür — ASLA isim/unvan uydurma.
+- En fazla 3 kişi listele.
+- "search_hint" alanına, kullanıcının bu kişiyi LinkedIn'de kendi gözüyle
+  bulup doğrulayabileceği bir arama sorgusu yaz (örn. site:linkedin.com/in
+  ile isim + şirket).
+- "message_draft" alanına, {user_name} adına yazılmış, kısa (max 80 kelime),
+  samimi ama saygılı, açıkça referans İSTEMEYEN — sadece tanışma/deneyim
+  sorma niyetiyle bağlantı kuran bir LinkedIn mesajı taslağı yaz. Türkçe yaz.
+
+Yanıtı SADECE şu JSON formatında ver, başka açıklama ekleme:
+{{"candidates": [{{"name": "...", "title": "...", "search_hint": "...", "message_draft": "..."}}]}}"""
+
+    try:
+        client = genai.Client(api_key=effective_key)
+        config = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=prompt, config=config),
+            timeout=30,
+        )
+        text = (response.text or "").strip()
+
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if not match:
+            logger.info(f"[{company_name}] Referans aramasında JSON bulunamadı.")
+            return []
+
+        data = json.loads(match.group())
+        candidates = data.get("candidates", [])
+        return candidates if isinstance(candidates, list) else []
+
+    except asyncio.TimeoutError:
+        logger.error("find_alumni_referrals timeout")
+        return []
+    except Exception as e:
+        logger.error(f"[{company_name}] Referans araması başarısız: {type(e).__name__} - {e}")
+        return []
+
+
+async def generate_followup_email(
+    job_title: str,
+    company_name: str,
+    days_since_submitted: int,
+    user_name: str,
+    api_key: Optional[str] = None,
+) -> str:
+    """Gönderilmiş ama yanıt gelmemiş bir başvuru için kibar, kısa bir takip
+    e-postası taslağı üretir."""
+    prompt = f"""Sen kariyer koçusun. {user_name} adına, aşağıdaki başvuru için
+KISA (max 120 kelime), kibar ve saygılı bir takip (follow-up) e-postası yaz.
+Israrcı veya sabırsız bir üslup kullanma — sadece nazikçe hatırlat ve hâlâ
+ilgilendiğini belirt.
+
+Pozisyon: {job_title}
+Şirket: {company_name}
+Başvurudan bu yana geçen süre: {days_since_submitted} gün
+
+HTML veya Markdown kullanma, sadece düz metin. 'Sayın İlgili,' ile başla."""
+
+    try:
+        client = _get_client(api_key)
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=prompt),
+            timeout=30,
+        )
+        return (response.text or "").strip()
+    except asyncio.TimeoutError:
+        logger.error("generate_followup_email timeout")
+        raise KariyerTimeoutError("Follow-up email generation timed out")
+    except Exception as e:
+        logger.error(f"Takip e-postası üretilemedi: {type(e).__name__} - {e}")
+        return ""
 
 
 async def generate_cv_content(

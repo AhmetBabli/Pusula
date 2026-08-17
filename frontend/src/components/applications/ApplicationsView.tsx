@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 function CopyButton({ text, label }) {
@@ -95,7 +95,175 @@ function CustomQuestionsBox({ appId, onSubmit, labels }) {
   );
 }
 
-function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnswerQuestions }) {
+function ReferralBox({ appId, candidates, onFind, labels, copyLabel }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState(!!candidates?.length);
+
+  const handleFind = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await onFind(appId);
+      setExpanded(true);
+    } catch (err) {
+      setError(err.message || labels.error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={handleFind}
+        disabled={loading}
+        className="text-xs font-label text-primary hover:underline underline-offset-2 w-fit flex items-center gap-1.5 disabled:opacity-50"
+      >
+        <Users className="w-3.5 h-3.5" />
+        {loading ? labels.loading : labels.prompt}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-label font-semibold text-on-surface-variant flex items-center gap-1.5">
+          <Users className="w-3.5 h-3.5" /> {labels.title}
+        </span>
+        <button type="button" onClick={handleFind} disabled={loading} className="text-xs font-label text-primary hover:underline underline-offset-2 shrink-0 disabled:opacity-50">
+          {loading ? labels.loading : labels.refresh}
+        </button>
+      </div>
+      <p className="text-xs font-body text-on-surface-variant leading-relaxed">{labels.disclaimer}</p>
+      {error && <span className="text-xs text-error">{error}</span>}
+      {!loading && (!candidates || candidates.length === 0) && (
+        <span className="text-xs font-body text-on-surface-variant italic">{labels.empty}</span>
+      )}
+      {candidates?.map((c, idx) => (
+        <div key={idx} className="flex flex-col gap-2 p-3 rounded-md bg-surface-container border border-outline-variant/10">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-label font-medium text-on-surface truncate">{c.name}</div>
+              <div className="text-xs font-body text-on-surface-variant truncate">{c.title}</div>
+            </div>
+            <CopyButton text={c.message_draft} label={copyLabel} />
+          </div>
+          {c.search_hint && (
+            <a
+              href={`https://www.google.com/search?q=${encodeURIComponent(c.search_hint)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-label text-primary hover:underline underline-offset-2 w-fit"
+            >
+              {labels.searchLink} <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+          <p className="text-xs font-body text-on-surface-variant leading-relaxed">{c.message_draft}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FollowupBox({ appId, onDraft, onSend, onMarkResponded, labels }) {
+  const [expanded, setExpanded] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [sent, setSent] = useState(false);
+
+  const handleOpen = async () => {
+    setExpanded(true);
+    setLoadingDraft(true);
+    setError(null);
+    try {
+      const data = await onDraft(appId);
+      setDraft(data.draft || '');
+    } catch (err) {
+      setError(err.message || labels.error);
+    } finally {
+      setLoadingDraft(false);
+    }
+  };
+
+  const handleSend = async () => {
+    setSending(true);
+    setError(null);
+    try {
+      await onSend(appId, draft);
+      setSent(true);
+    } catch (err) {
+      setError(err.message || labels.error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (sent) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm">
+        <CheckCircle className="w-4 h-4 shrink-0" /> {labels.sentConfirm}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-4 rounded-md bg-primary-container/5 border border-primary-container/20">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <Clock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <span className="text-sm font-body text-on-surface">{labels.nudge}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onMarkResponded(appId)}
+          className="text-xs font-label text-on-surface-variant hover:text-on-surface underline underline-offset-2 shrink-0"
+        >
+          {labels.gotResponse}
+        </button>
+      </div>
+      {!expanded ? (
+        <button type="button" onClick={handleOpen} className="text-xs font-label text-primary hover:underline underline-offset-2 w-fit">
+          {labels.draftPrompt}
+        </button>
+      ) : (
+        <>
+          {loadingDraft ? (
+            <span className="text-xs font-body text-on-surface-variant">{labels.loading}</span>
+          ) : (
+            <textarea
+              aria-label={labels.draftPrompt}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={4}
+              className="bg-surface-container border border-outline-variant/15 rounded-md px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors resize-none"
+            />
+          )}
+          {error && <span className="text-xs text-error">{error}</span>}
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setExpanded(false)} className="text-xs font-label text-on-surface-variant hover:text-on-surface transition-colors">
+              {labels.cancel}
+            </button>
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || loadingDraft || !draft.trim()}
+              className="px-3 py-1.5 rounded-md bg-primary-container text-white text-xs font-label hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 transition-all"
+            >
+              {sending ? labels.sending : labels.send}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnswerQuestions, onFindReferrals, onDraftFollowup, onSendFollowup, onMarkResponded }) {
   const { t, language } = useLanguage();
   const copyLabel = { copy: t('applications_copy'), copied: t('applications_copied') };
   const customQaLabels = {
@@ -106,6 +274,27 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
     submit: t('applications_custom_qa_submit'),
     loading: t('applications_custom_qa_loading'),
     error: t('applications_custom_qa_error'),
+  };
+  const referralLabels = {
+    prompt: t('applications_referral_prompt'),
+    title: t('applications_referral_title'),
+    refresh: t('applications_referral_refresh'),
+    disclaimer: t('applications_referral_disclaimer'),
+    empty: t('applications_referral_empty'),
+    searchLink: t('applications_referral_search_link'),
+    loading: t('applications_referral_loading'),
+    error: t('applications_referral_error'),
+  };
+  const followupLabels = {
+    nudge: t('applications_followup_nudge'),
+    gotResponse: t('applications_followup_got_response'),
+    draftPrompt: t('applications_followup_draft_prompt'),
+    cancel: t('applications_followup_cancel'),
+    send: t('applications_followup_send'),
+    sending: t('applications_followup_sending'),
+    loading: t('applications_followup_loading'),
+    error: t('applications_followup_error'),
+    sentConfirm: t('applications_followup_sent_confirm'),
   };
 
   const EMAIL_SOURCE_LABEL = {
@@ -321,6 +510,28 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
                         )}
                         <CustomQuestionsBox appId={app.id} onSubmit={onAnswerQuestions} labels={customQaLabels} />
                       </div>
+                    )}
+
+                    {/* Mezun/Referans bulucu: onaylandıktan sonra herhangi bir aşamada kullanılabilir */}
+                    {(app.status === 'approved' || app.status === 'submitted') && (
+                      <ReferralBox
+                        appId={app.id}
+                        candidates={app.referral_candidates}
+                        onFind={onFindReferrals}
+                        labels={referralLabels}
+                        copyLabel={copyLabel}
+                      />
+                    )}
+
+                    {/* Başvuru sonrası takip nudge'ı: 10+ gündür yanıt yoksa */}
+                    {app.followup_eligible && (
+                      <FollowupBox
+                        appId={app.id}
+                        onDraft={onDraftFollowup}
+                        onSend={onSendFollowup}
+                        onMarkResponded={onMarkResponded}
+                        labels={followupLabels}
+                      />
                     )}
 
                     {/* Timeline */}

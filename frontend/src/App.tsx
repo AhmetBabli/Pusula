@@ -27,6 +27,7 @@ import { useTaskStream } from './hooks/useTaskStream';
 import {
   getDashboardStats, getJobs, getApplications, getEvents, getCVs, getInboxItems,
   syncJobs, syncInbox, prepareApplication, approveApplication, submitApplication, answerCustomQuestions,
+  findReferrals, draftFollowup, sendFollowup, markResponded,
   uploadCV, deleteCV, setDefaultCV, linkEmailAccount, getAccounts, prepareOutreach, sendOutreach,
   getProfile, getToken, logout as apiLogout,
 } from './services/api';
@@ -296,6 +297,25 @@ const App: React.FC = () => {
     await refreshApplications();
   };
 
+  const handleFindReferrals = async (id: number) => {
+    await findReferrals(id);
+    await refreshApplications();
+  };
+
+  const handleDraftFollowup = async (id: number) => {
+    return draftFollowup(id);
+  };
+
+  const handleSendFollowup = async (id: number, body: string) => {
+    await sendFollowup(id, body);
+    await refreshApplications();
+  };
+
+  const handleMarkResponded = async (id: number) => {
+    await markResponded(id);
+    await refreshApplications();
+  };
+
   const handleCvUpload = async (file: File, title: string, variant: string) => {
     await uploadCV(file, title, variant);
     await refreshCvs();
@@ -370,6 +390,10 @@ const App: React.FC = () => {
         onApprove={handleApprove}
         onSubmit={handleSubmitApplication}
         onAnswerQuestions={handleAnswerQuestions}
+        onFindReferrals={handleFindReferrals}
+        onDraftFollowup={handleDraftFollowup}
+        onSendFollowup={handleSendFollowup}
+        onMarkResponded={handleMarkResponded}
       />
     ),
     events: <EventsView events={events} isLoading={eventsLoading} />,

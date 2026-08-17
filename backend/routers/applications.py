@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -33,6 +33,9 @@ class CustomQARequest(BaseModel):
     # Kullanıcının, ilanın kendi başvuru formunda gördüğü gerçek sorular
     questions: List[str] = Field(..., min_length=1, max_length=10)
 
+class SendFollowupRequest(BaseModel):
+    body: str = Field(..., min_length=10)
+
 # GET / listelemesi için alt şemalar
 class JobSummary(BaseModel):
     id: int
@@ -59,6 +62,8 @@ class ApplicationOut(BaseModel):
     send_status: Optional[str] = None
     send_error: Optional[str] = None
     qa_answers: Optional[List[dict]] = None
+    referral_candidates: Optional[List[dict]] = None
+    followup_eligible: bool = False
 
 # === Endpoints ===
 
@@ -85,13 +90,29 @@ def list_applications(
 
     records = q.all()
     result = []
-    
+
+    # Takip nudge'ı için eşik: gerçekten gönderilmiş (sent), henüz yanıt
+    # gelmemiş, henüz takip e-postası da gönderilmemiş başvurularda 10+ gün
+    # geçtiyse "takip e-postası öner" — tarih matematiğini burada yapıp
+    # frontend'e hazır bir bool olarak veriyoruz.
+    followup_threshold = datetime.now(timezone.utc) - timedelta(days=10)
+
     # Veritabanına tekrar gitmiyoruz, zaten çekilmiş verileri eşliyoruz
     for app, job, cv, cover in records:
         preview = None
         if cover and cover.content:
             preview = cover.content[:200] + "..." if len(cover.content) > 200 else cover.content
-            
+
+        submitted_at = app.submitted_at
+        if submitted_at and submitted_at.tzinfo is None:
+            submitted_at = submitted_at.replace(tzinfo=timezone.utc)
+        followup_eligible = bool(
+            app.send_status == "sent"
+            and app.response_at is None
+            and app.followup_sent_at is None
+            and submitted_at and submitted_at < followup_threshold
+        )
+
         result.append({
             "id": app.id,
             "status": app.status,
@@ -106,8 +127,10 @@ def list_applications(
             "send_status": app.send_status,
             "send_error": app.send_error,
             "qa_answers": app.qa_answers,
+            "referral_candidates": app.referral_candidates,
+            "followup_eligible": followup_eligible,
         })
-        
+
     return result
 
 @router.post("/prepare")
@@ -358,3 +381,144 @@ def submit_application(
             "cv_path": cv.file_path if cv else ""
         }
     }
+
+
+@router.post("/{app_id}/find-referrals")
+@limiter.limit("20/hour")
+async def find_referrals(
+    request: Request,
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Hedef şirkette aynı üniversiteden mezun kişileri arar, her biri için
+    LinkedIn'de doğrulanabilecek bir arama ipucu + kısa bir referans-isteme
+    mesajı taslağı üretir. Sonuç tekrar Gemini çağırmamak için Application'a
+    yazılır. LinkedIn API erişimimiz olmadığı için mesaj gönderilmiyor —
+    kullanıcı LinkedIn'de kendisi bulup kopyala-yapıştır yapıyor."""
+    from backend.ai.gemini_client import find_alumni_referrals
+
+    app = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Başvuru bulunamadı")
+
+    job = db.query(Job).filter(Job.id == app.job_id).first()
+    if not job:
+        raise HTTPException(status_code=400, detail="Başvuruya ait ilan bulunamadı")
+    if not current_user.university:
+        raise HTTPException(status_code=400, detail="Bu özellik için profilinizde üniversite bilgisi gerekli.")
+
+    candidates = await find_alumni_referrals(
+        company_name=job.company,
+        university=current_user.university,
+        target_role=job.title,
+        user_name=current_user.full_name,
+        api_key=current_user.gemini_api_key,
+    )
+
+    app.referral_candidates = candidates
+    db.commit()
+    db.refresh(app)
+
+    return {"referral_candidates": app.referral_candidates}
+
+
+@router.post("/{app_id}/draft-followup")
+@limiter.limit("20/hour")
+async def draft_followup(
+    request: Request,
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Gönderilmiş ama yanıt gelmemiş bir başvuru için takip e-postası
+    taslağı üretir (kaydetmez — kullanıcı düzenleyip /send-followup ile
+    gönderir, tıpkı ilk başvuru mektubu gibi onay öncesi son hali görülür)."""
+    from backend.ai.gemini_client import generate_followup_email
+
+    app = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Başvuru bulunamadı")
+    if not app.contact_email or app.send_status != "sent":
+        raise HTTPException(status_code=400, detail="Bu başvuru için gerçek bir e-posta gönderimi yapılmamış.")
+
+    job = db.query(Job).filter(Job.id == app.job_id).first()
+    submitted_at = app.submitted_at
+    if submitted_at and submitted_at.tzinfo is None:
+        submitted_at = submitted_at.replace(tzinfo=timezone.utc)
+    days_since = (datetime.now(timezone.utc) - submitted_at).days if submitted_at else 0
+
+    draft = await generate_followup_email(
+        job_title=job.title if job else "",
+        company_name=job.company if job else "",
+        days_since_submitted=days_since,
+        user_name=current_user.full_name,
+        api_key=current_user.gemini_api_key,
+    )
+
+    if not draft:
+        raise HTTPException(status_code=502, detail="Takip e-postası üretilemedi, lütfen tekrar deneyin.")
+
+    return {"draft": draft, "contact_email": app.contact_email}
+
+
+@router.post("/{app_id}/send-followup")
+@limiter.limit("10/hour")
+def send_followup(
+    request: Request,
+    app_id: int,
+    req: SendFollowupRequest,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Kullanıcının gördüğü/düzenlediği takip e-postasını gerçekten gönderir
+    — submit_application'daki gerçek gönderimle aynı disiplin: onay sonrası,
+    açık bir 'gönder' adımı."""
+    app = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Başvuru bulunamadı")
+    if not app.contact_email or app.send_status != "sent":
+        raise HTTPException(status_code=400, detail="Bu başvuru için gerçek bir e-posta gönderimi yapılmamış.")
+
+    account = db.query(EmailAccount).filter(
+        EmailAccount.user_id == current_user.id, EmailAccount.is_active == True
+    ).first()
+    if not account:
+        raise HTTPException(status_code=400, detail="Önce bir Gmail hesabı bağlamalısınız.")
+
+    job = db.query(Job).filter(Job.id == app.job_id).first()
+    subject = f"Re: Başvuru - {job.title}" if job else "Re: Başvuru"
+    html_body = req.body.replace("\n", "<br>")
+
+    success = OutreachAgent.send_via_account(
+        account=account,
+        target_email=app.contact_email,
+        subject=subject,
+        html_body=html_body,
+    )
+
+    if not success:
+        raise HTTPException(status_code=502, detail="Takip e-postası gönderilemedi. Lütfen tekrar deneyin.")
+
+    app.followup_sent_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"message": f"Takip e-postası {app.contact_email} adresine gönderildi. ✅", "followup_sent_at": app.followup_sent_at.isoformat()}
+
+
+@router.post("/{app_id}/mark-responded")
+def mark_responded(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Kullanıcı bu başvuruya (başka bir kanaldan da olsa) yanıt aldığını
+    belirtir — takip nudge'ı bir daha önerilmez."""
+    app = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Başvuru bulunamadı")
+
+    app.response_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"response_at": app.response_at.isoformat()}

@@ -200,5 +200,24 @@ export const answerCustomQuestions = (app_id, questions) => request(`/applicatio
   timeoutMs: 30000,
 });
 
+// ── Mezun/Referans Bulucu (Google Search grounding ile Gemini) ──
+export const findReferrals = (app_id) => request(`/applications/${app_id}/find-referrals`, {
+  method: 'POST',
+  timeoutMs: 30000,
+});
+
+// ── Başvuru Sonrası Takip ──
+export const draftFollowup = (app_id) => request(`/applications/${app_id}/draft-followup`, {
+  method: 'POST',
+  timeoutMs: 30000,
+});
+export const sendFollowup = (app_id, body) => request(`/applications/${app_id}/send-followup`, {
+  method: 'POST',
+  body: { body },
+});
+export const markResponded = (app_id) => request(`/applications/${app_id}/mark-responded`, {
+  method: 'POST',
+});
+
 // ── DELETE Istekleri ──
 export const deleteCV = (id) => request(`/cvs/${id}`, { method: 'DELETE' });

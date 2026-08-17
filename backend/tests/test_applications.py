@@ -300,3 +300,141 @@ def test_submit_is_rate_limited_after_ten_per_hour(client, db_session, monkeypat
             assert res.status_code == 200, res.text
         else:
             assert res.status_code == 429
+
+
+# ─── Mezun/Referans Bulucu ───
+
+def test_find_referrals_returns_candidates(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    user.university = "Doğuş Üniversitesi"
+    db_session.commit()
+    _mock_letter_and_email(monkeypatch)
+
+    fake_candidates = [
+        {"name": "Ayşe Yılmaz", "title": "Yazılım Mühendisi", "search_hint": "site:linkedin.com/in Ayşe Yılmaz Test A.Ş.", "message_draft": "Merhaba Ayşe,..."},
+    ]
+
+    async def fake_find_alumni_referrals(**kwargs):
+        assert kwargs["university"] == "Doğuş Üniversitesi"
+        assert kwargs["company_name"] == "Test A.Ş."
+        return fake_candidates
+
+    monkeypatch.setattr("backend.ai.gemini_client.find_alumni_referrals", fake_find_alumni_referrals)
+
+    app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]
+    res = client.post(f"/api/applications/{app_id}/find-referrals", headers=headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json()["referral_candidates"] == fake_candidates
+
+    # Sonuç Application'a yazılmış olmalı, listelemede de görünmeli.
+    listed = client.get("/api/applications/", headers=headers).json()
+    app_out = next(a for a in listed if a["id"] == app_id)
+    assert app_out["referral_candidates"] == fake_candidates
+
+
+def test_find_referrals_requires_university(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    _mock_letter_and_email(monkeypatch)
+
+    app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]
+    res = client.post(f"/api/applications/{app_id}/find-referrals", headers=headers)
+    assert res.status_code == 400
+
+
+# ─── Başvuru Sonrası Takip Nudge'ı ───
+
+def _submit_with_real_email(client, headers, db_session, user_id, job, cv, monkeypatch):
+    _mock_letter_and_email(monkeypatch)
+    account = EmailAccount(user_id=user_id, email="sender@example.com")
+    account.app_password = "fake-app-password"
+    db_session.add(account)
+    db_session.commit()
+    monkeypatch.setattr("backend.automation.outreach_agent.OutreachAgent.send_via_account", lambda **kwargs: True)
+
+    app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]
+    client.post(f"/api/applications/{app_id}/approve", json={"approved": True}, headers=headers)
+    client.post(f"/api/applications/{app_id}/submit", headers=headers)
+    return app_id
+
+
+def test_draft_followup_requires_sent_email(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    _mock_letter_and_email(monkeypatch, email="", source="")
+
+    app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]
+    client.post(f"/api/applications/{app_id}/approve", json={"approved": True}, headers=headers)
+    client.post(f"/api/applications/{app_id}/submit", headers=headers)  # e-postasız -> kopyala-yapıştır
+
+    res = client.post(f"/api/applications/{app_id}/draft-followup", headers=headers)
+    assert res.status_code == 400
+
+
+def test_followup_not_eligible_before_ten_days(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    app_id = _submit_with_real_email(client, headers, db_session, user.id, job, cv, monkeypatch)
+
+    listed = client.get("/api/applications/", headers=headers).json()
+    app_out = next(a for a in listed if a["id"] == app_id)
+    assert app_out["followup_eligible"] is False  # az önce gönderildi
+
+
+def test_followup_eligible_after_ten_days_and_full_flow(client, db_session, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.models.application import Application
+
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    app_id = _submit_with_real_email(client, headers, db_session, user.id, job, cv, monkeypatch)
+
+    # 10+ gün önce gönderilmiş gibi göster
+    app = db_session.query(Application).filter(Application.id == app_id).first()
+    app.submitted_at = datetime.now(timezone.utc) - timedelta(days=11)
+    db_session.commit()
+
+    listed = client.get("/api/applications/", headers=headers).json()
+    app_out = next(a for a in listed if a["id"] == app_id)
+    assert app_out["followup_eligible"] is True
+
+    async def fake_generate_followup_email(**kwargs):
+        assert kwargs["days_since_submitted"] >= 11
+        return "Sayın İlgili, başvurumla ilgili..."
+
+    monkeypatch.setattr("backend.ai.gemini_client.generate_followup_email", fake_generate_followup_email)
+
+    draft_res = client.post(f"/api/applications/{app_id}/draft-followup", headers=headers)
+    assert draft_res.status_code == 200, draft_res.text
+    draft_body = draft_res.json()["draft"]
+
+    monkeypatch.setattr("backend.automation.outreach_agent.OutreachAgent.send_via_account", lambda **kwargs: True)
+    send_res = client.post(f"/api/applications/{app_id}/send-followup", json={"body": draft_body}, headers=headers)
+    assert send_res.status_code == 200, send_res.text
+
+    # Takip gönderildikten sonra nudge bir daha önerilmemeli.
+    listed_after = client.get("/api/applications/", headers=headers).json()
+    app_after = next(a for a in listed_after if a["id"] == app_id)
+    assert app_after["followup_eligible"] is False
+
+
+def test_mark_responded_stops_followup_eligibility(client, db_session, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.models.application import Application
+
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    app_id = _submit_with_real_email(client, headers, db_session, user.id, job, cv, monkeypatch)
+
+    app = db_session.query(Application).filter(Application.id == app_id).first()
+    app.submitted_at = datetime.now(timezone.utc) - timedelta(days=11)
+    db_session.commit()
+
+    res = client.post(f"/api/applications/{app_id}/mark-responded", headers=headers)
+    assert res.status_code == 200, res.text
+
+    listed = client.get("/api/applications/", headers=headers).json()
+    app_out = next(a for a in listed if a["id"] == app_id)
+    assert app_out["followup_eligible"] is False

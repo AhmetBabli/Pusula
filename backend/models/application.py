@@ -34,6 +34,14 @@ class Application(Base):
     send_status = Column(String(20), default="not_applicable")  # not_applicable | pending | sent | failed
     send_error = Column(Text, nullable=True)
 
+    # Mezun/referans bulucu: [{"name","title","search_hint","message_draft"}]
+    # — tekrar tekrar Gemini çağırmamak için sonuç burada cache'lenir.
+    referral_candidates = Column(JSON, nullable=True)
+
+    # Başvuru sonrası takip: gerçekten gönderilmiş bir takip e-postası varsa
+    # ne zaman gönderildiği — nudge'ın tekrar tekrar önerilmesini engeller.
+    followup_sent_at = Column(DateTime, nullable=True)
+
     # Kullanıcı notları
     notes = Column(Text, nullable=True)
     rejection_reason = Column(Text, nullable=True)     # Kullanıcı neden reddetti

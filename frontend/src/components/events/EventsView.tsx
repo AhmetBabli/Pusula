@@ -3,8 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, MapPin, Clock, ExternalLink } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
+const EVENT_TYPE_KEYS = {
+  hackathon: 'events_type_hackathon',
+  career_fair: 'events_type_career_fair',
+  seminar: 'events_type_seminar',
+  networking: 'events_type_networking',
+  workshop: 'events_type_workshop',
+};
+
 function EventsView({ events, isLoading }) {
   const { t, language } = useLanguage();
+  const eventTypeLabel = (eventType) => (eventType && EVENT_TYPE_KEYS[eventType] ? t(EVENT_TYPE_KEYS[eventType]) : eventType);
   const containerVariants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.06 } }
@@ -31,8 +40,8 @@ function EventsView({ events, isLoading }) {
             </div>
             <h2 className="text-3xl font-headline font-bold text-on-surface tracking-tight">{t('events_title')}</h2>
           </div>
-          <p className="text-sm font-mono text-on-surface-variant tracking-wider uppercase flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+          <p className="text-sm text-on-surface-variant flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             {events.length} {t('events_upcoming_suffix')}
           </p>
         </div>
@@ -76,10 +85,10 @@ function EventsView({ events, isLoading }) {
                 >
                   <div className="flex gap-4 items-start mb-4">
                     <div className="flex flex-col items-center justify-center min-w-[3.5rem] bg-surface-container-lowest border border-outline-variant/10 rounded-md py-2 px-3">
-                      <span className="text-2xl font-mono font-bold tabular-nums text-on-surface leading-none">
+                      <span className="text-2xl font-bold tabular-nums text-on-surface leading-none">
                         {event.event_date ? new Date(event.event_date).getDate() : '?'}
                       </span>
-                      <span className="text-[10px] font-label text-primary tracking-widest uppercase mt-1">
+                      <span className="text-[11px] font-label font-semibold text-primary mt-1">
                         {event.event_date
                           ? new Date(event.event_date).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { month: 'short' })
                           : ''
@@ -93,7 +102,7 @@ function EventsView({ events, isLoading }) {
                           <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {event.location}</span>
                         )}
                         {event.event_type && (
-                          <span className="px-2 py-0.5 rounded bg-outline-variant/5 text-on-surface/80">{event.event_type}</span>
+                          <span className="px-2 py-0.5 rounded bg-outline-variant/5 text-on-surface/80">{eventTypeLabel(event.event_type)}</span>
                         )}
                       </div>
                     </div>

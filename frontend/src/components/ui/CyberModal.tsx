@@ -1,8 +1,10 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useLanguage } from '../../i18n/LanguageContext';
 import './CyberModal.css';
 
 const CyberModal = ({ isOpen, onClose, title, children }) => {
+  const { t } = useLanguage();
   useEffect(() => {
     if (!isOpen) return;
 
@@ -52,7 +54,7 @@ const CyberModal = ({ isOpen, onClose, title, children }) => {
           <button 
             className="cyber-modal-close" 
             onClick={onClose}
-            aria-label="Modalı Kapat" // Ekran okuyucular için
+            aria-label={t('modal_close')} // Ekran okuyucular için
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"></line>

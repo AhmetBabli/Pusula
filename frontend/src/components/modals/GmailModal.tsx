@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import CyberModal from '../ui/CyberModal';
-import { Shield, Link } from 'lucide-react';
+import { Shield, Link, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
-function GmailModal({ isOpen, onClose, onLink, isLoading }) {
+function GmailModal({ isOpen, onClose, onLink, isLoading, error }) {
   const { t } = useLanguage();
   const [form, setForm] = useState({ email: '', password: '' });
 
@@ -70,6 +70,13 @@ function GmailModal({ isOpen, onClose, onLink, isLoading }) {
             autoComplete="new-password"
           />
         </fieldset>
+
+        {error && (
+          <div className="flex items-start gap-2 p-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <button
           type="submit"

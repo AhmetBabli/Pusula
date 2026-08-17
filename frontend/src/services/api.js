@@ -35,9 +35,9 @@ const request = async (endpoint, options = {}) => {
     config.body = JSON.stringify(config.body);
   }
 
-  // 4. Zaman Aşımı (Timeout) Kontrolü (10 saniye)
+  // 4. Zaman Aşımı (Timeout) Kontrolü (varsayılan 10 saniye, gerekirse override edilebilir)
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs || 10000);
   config.signal = controller.signal;
 
   try {
@@ -125,9 +125,13 @@ export const linkEmailAccount = (email, app_password) => request('/inbox/account
   method: 'POST',
   body: { email, app_password }
 });
-export const sendColdEmail = (company_name) => request('/outreach/cold-email', {
+export const prepareOutreach = (company_name) => request('/outreach/prepare', {
   method: 'POST',
   body: { company_name }
+});
+export const sendOutreach = (outreach_id, target_email = null) => request(`/outreach/${outreach_id}/send`, {
+  method: 'POST',
+  body: { target_email }
 });
 
 // ── Job işlemleri ──
@@ -175,15 +179,25 @@ export const getCVDetail = (id) => request(`/cvs/${id}`);
 // ── CV Varsayılan Ayarla ──
 export const setDefaultCV = (id) => request(`/cvs/${id}/set-default`, { method: 'PATCH' });
 
-// ── Başvuru Hazırla ──
+// ── Başvuru Hazırla ── (mektup + soru-cevap + e-posta keşfi paralel 3 AI çağrısı
+// yapıyor; geçici Gemini yoğunluğunda backend'in kendi retry'ı bile 10sn'yi
+// aşabiliyor, o yüzden burada daha geniş bir zaman aşımı kullanıyoruz.)
 export const prepareApplication = (job_id, cv_id = null) => request('/applications/prepare', {
   method: 'POST',
-  body: { job_id, cv_id }
+  body: { job_id, cv_id },
+  timeoutMs: 45000,
 });
 
 // ── Başvuru Gönder (onaylanmış başvuruyu gönderime çevir) ──
 export const submitApplication = (app_id) => request(`/applications/${app_id}/submit`, {
   method: 'POST',
+});
+
+// ── İlana Özel Soruları Cevapla (kullanıcı formdaki gerçek soruları yapıştırır) ──
+export const answerCustomQuestions = (app_id, questions) => request(`/applications/${app_id}/answer-questions`, {
+  method: 'POST',
+  body: { questions },
+  timeoutMs: 30000,
 });
 
 // ── DELETE Istekleri ──

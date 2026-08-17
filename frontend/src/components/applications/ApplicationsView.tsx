@@ -1,14 +1,116 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
-function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
+function CopyButton({ text, label }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Panoya erişim engellenmişse sessizce yok say — buton her zaman metni gösterir
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-label transition-all duration-150 shrink-0 ${copied ? 'bg-emerald-500/15 text-emerald-500' : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high active:scale-[0.96]'}`}
+    >
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? label?.copied : label?.copy}
+    </button>
+  );
+}
+
+function CustomQuestionsBox({ appId, onSubmit, labels }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async () => {
+    const questions = text.split('\n').map((q) => q.trim()).filter(Boolean);
+    if (questions.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await onSubmit(appId, questions);
+      setText('');
+      setOpen(false);
+    } catch (err) {
+      setError(err.message || labels.error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-xs font-label text-primary hover:underline underline-offset-2 w-fit"
+      >
+        {labels.prompt}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
+      <span className="text-xs font-body text-on-surface-variant">{labels.hint}</span>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={labels.placeholder}
+        rows={3}
+        autoFocus
+        className="bg-surface-container border border-outline-variant/15 rounded-md px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors resize-none"
+      />
+      {error && <span className="text-xs text-error">{error}</span>}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setError(null); }}
+          className="text-xs font-label text-on-surface-variant hover:text-on-surface transition-colors"
+        >
+          {labels.cancel}
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={loading || !text.trim()}
+          className="px-3 py-1.5 rounded-md bg-primary-container text-white text-xs font-label hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 transition-all"
+        >
+          {loading ? labels.loading : labels.submit}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnswerQuestions }) {
   const { t, language } = useLanguage();
+  const copyLabel = { copy: t('applications_copy'), copied: t('applications_copied') };
+  const customQaLabels = {
+    prompt: t('applications_custom_qa_prompt'),
+    hint: t('applications_custom_qa_hint'),
+    placeholder: t('applications_custom_qa_placeholder'),
+    cancel: t('applications_custom_qa_cancel'),
+    submit: t('applications_custom_qa_submit'),
+    loading: t('applications_custom_qa_loading'),
+    error: t('applications_custom_qa_error'),
+  };
 
   const EMAIL_SOURCE_LABEL = {
     job_posting: { text: t('applications_source_job_posting'), tone: 'text-emerald-500' },
     web_search: { text: t('applications_source_web_search'), tone: 'text-yellow-500' },
+    company_site: { text: t('applications_source_company_site'), tone: 'text-yellow-500' },
     manual: { text: t('applications_source_manual'), tone: 'text-on-surface-variant' },
   };
 
@@ -58,7 +160,7 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
             </div>
             <h2 className="text-3xl font-headline font-bold text-on-surface tracking-tight">{t('applications_title')}</h2>
           </div>
-          <p className="text-sm font-mono text-on-surface-variant tracking-wider uppercase flex items-center gap-2">
+          <p className="text-sm text-on-surface-variant flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             {applications.length} {t('applications_count_suffix')}
           </p>
@@ -156,7 +258,7 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
                     {/* E-posta ile onaylı gönderim: onay öncesi düzenlenebilir alan */}
                     {app.status === 'awaiting_approval' && (
                       <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-1.5 text-xs font-label text-on-surface-variant uppercase tracking-wider">
+                        <label className="flex items-center gap-1.5 text-xs font-label text-on-surface-variant">
                           <Mail className="w-3.5 h-3.5" /> {t('applications_contact_email_label')}
                         </label>
                         <input
@@ -168,22 +270,18 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
                         />
                         {app.contact_email_source && EMAIL_SOURCE_LABEL[app.contact_email_source] && (
                           <span className={`text-xs font-label flex items-center gap-1 ${EMAIL_SOURCE_LABEL[app.contact_email_source].tone}`}>
-                            {app.contact_email_source === 'web_search' && <AlertTriangle className="w-3.5 h-3.5" />}
+                            {(app.contact_email_source === 'web_search' || app.contact_email_source === 'company_site') && <AlertTriangle className="w-3.5 h-3.5" />}
                             {EMAIL_SOURCE_LABEL[app.contact_email_source].text}
                           </span>
                         )}
                       </div>
                     )}
 
-                    {/* Onaylandı: hedef e-posta veya kopyala-yapıştır bilgisi + gönderim hatası */}
-                    {app.status === 'approved' && (
+                    {/* Onaylandı: hedef e-posta bilgisi + gönderim hatası */}
+                    {app.status === 'approved' && app.contact_email && (
                       <div className="text-sm font-body text-on-surface-variant flex items-center gap-1.5">
                         <Mail className="w-3.5 h-3.5 shrink-0" />
-                        {app.contact_email ? (
-                          <span>{t('applications_will_send_to')} <span className="text-on-surface font-medium">{app.contact_email}</span></span>
-                        ) : (
-                          <span>{t('applications_no_email_hint')}</span>
-                        )}
+                        <span>{t('applications_will_send_to')} <span className="text-on-surface font-medium">{app.contact_email}</span></span>
                       </div>
                     )}
                     {app.status === 'approved' && app.send_status === 'failed' && (
@@ -193,18 +291,21 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
                       </div>
                     )}
 
-                    {/* Gönderildi: gerçek e-posta sonucu ya da kopyala-yapıştır bilgisi */}
+                    {/* Gönderildi: gerçek e-posta sonucu */}
                     {app.status === 'submitted' && app.send_status === 'sent' && (
                       <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm">
                         <CheckCircle className="w-4 h-4 shrink-0" />
                         {language === 'tr' ? `${app.contact_email} adresine gönderildi.` : `Sent to ${app.contact_email}.`}
                       </div>
                     )}
-                    {app.status === 'submitted' && app.send_status === 'not_applicable' && (
-                      <div className="flex flex-col gap-2 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
-                        <span className="text-sm font-body text-on-surface-variant">
-                          {t('applications_manual_fallback_desc')}
-                        </span>
+
+                    {/* E-posta bulunamadı: ilana ulaşamıyoruz — hem onay öncesi hem sonrası aynı yerde açıklayıp soru isteyelim */}
+                    {(app.status === 'approved' || app.status === 'submitted') && !app.contact_email && (
+                      <div className="flex flex-col gap-3 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
+                        <div className="flex items-center gap-1.5 text-sm font-body text-on-surface-variant">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          <span>{t('applications_manual_fallback_desc')}</span>
+                        </div>
                         {app.job?.source_url && (
                           <a
                             href={app.job.source_url}
@@ -215,6 +316,7 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
                             {t('applications_go_to_listing')} <ExternalLink className="w-3.5 h-3.5" />
                           </a>
                         )}
+                        <CustomQuestionsBox appId={app.id} onSubmit={onAnswerQuestions} labels={customQaLabels} />
                       </div>
                     )}
 
@@ -231,7 +333,7 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
                               <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-150 ${isActive ? 'bg-primary border-primary text-white' : 'bg-surface-container border-outline-variant/15 text-on-surface-variant'}`}>
                                 <StepIcon className={`w-4 h-4 ${isCurrent ? 'animate-pulse' : ''}`} />
                               </div>
-                              <div className={`text-[10px] font-label tracking-wider uppercase ${isActive ? 'text-primary' : 'text-on-surface-variant/50'}`}>
+                              <div className={`text-[11px] font-label font-medium ${isActive ? 'text-primary' : 'text-on-surface-variant/50'}`}>
                                 {step.label}
                               </div>
                             </div>
@@ -241,11 +343,33 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit }) {
                     </div>
 
                     {app.cover_letter_preview && (
-                      <div className="flex items-start gap-3 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10 mt-2">
-                        <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                        <p className="text-sm font-body text-on-surface-variant leading-relaxed italic">
-                          "{app.cover_letter_preview}"
-                        </p>
+                      <div className="flex flex-col gap-2 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10 mt-2">
+                        <div className="flex items-start gap-3">
+                          <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                          <p className="text-sm font-body text-on-surface-variant leading-relaxed italic flex-1">
+                            "{app.cover_letter_preview}"
+                          </p>
+                        </div>
+                        <div className="flex justify-end">
+                          <CopyButton text={app.cover_letter_full || app.cover_letter_preview} label={copyLabel} />
+                        </div>
+                      </div>
+                    )}
+
+                    {app.qa_answers && app.qa_answers.length > 0 && (
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="flex items-center gap-1.5 text-xs font-label font-semibold text-on-surface-variant">
+                          <HelpCircle className="w-3.5 h-3.5" /> {t('applications_qa_title')}
+                        </div>
+                        {app.qa_answers.map((qa, idx) => (
+                          <div key={idx} className="flex flex-col gap-1.5 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
+                            <div className="flex items-start justify-between gap-3">
+                              <span className="text-sm font-label text-on-surface font-medium">{qa.question}</span>
+                              <CopyButton text={qa.answer} label={copyLabel} />
+                            </div>
+                            <p className="text-sm font-body text-on-surface-variant leading-relaxed">{qa.answer}</p>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </motion.div>

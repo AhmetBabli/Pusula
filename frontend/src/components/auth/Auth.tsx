@@ -88,7 +88,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       const google = (window as any).google;
       const client = google.accounts.oauth2.initCodeClient({
         client_id: GOOGLE_CLIENT_ID,
-        scope: 'openid email profile https://www.googleapis.com/auth/gmail.send',
+        scope: 'openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly',
         ux_mode: 'popup',
         access_type: 'offline',
         prompt: 'consent',
@@ -128,7 +128,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <ShieldCheck className="w-6 h-6 text-primary" />
           </div>
           <h1 className="text-2xl font-headline font-semibold tracking-wide text-on-surface mb-2">{t('app_title')}</h1>
-          <p className="text-xs font-label text-on-surface-variant tracking-[0.2em] uppercase">
+          <p className="text-sm font-label text-on-surface-variant">
             {t('auth_subtitle')}
           </p>
         </div>
@@ -190,7 +190,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
           <div className="flex items-center gap-3 mb-6">
             <div className="flex-1 h-px bg-outline-variant/15" />
-            <span className="text-[11px] font-label text-on-surface-variant uppercase tracking-wider">{t('auth_divider_or')}</span>
+            <span className="text-[11px] font-label text-on-surface-variant">{t('auth_divider_or')}</span>
             <div className="flex-1 h-px bg-outline-variant/15" />
           </div>
 
@@ -214,7 +214,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               >
                 {mode === 'register' && (
                   <div className="space-y-2">
-                    <label className="text-xs font-label text-on-surface-variant tracking-wider uppercase">{t('auth_full_name')}</label>
+                    <label className="text-xs font-label font-medium text-on-surface-variant">{t('auth_full_name')}</label>
                     <div className="relative group">
                       <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant group-focus-within:text-primary transition-colors" />
                       <input
@@ -231,7 +231,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-xs font-label text-on-surface-variant tracking-wider uppercase">{t('auth_email')}</label>
+                  <label className="text-xs font-label font-medium text-on-surface-variant">{t('auth_email')}</label>
                   <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant group-focus-within:text-primary transition-colors" />
                     <input
@@ -247,7 +247,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-label text-on-surface-variant tracking-wider uppercase flex justify-between">
+                  <label className="text-xs font-label font-medium text-on-surface-variant flex justify-between">
                     <span>{t('auth_password')}</span>
                   </label>
                   <div className="relative group">

@@ -53,8 +53,8 @@ function InboxView({ items, isLoading, onSync }) {
             </div>
             <h2 className="text-3xl font-headline font-bold text-on-surface tracking-tight">{t('inbox_title')}</h2>
           </div>
-          <p className="text-sm font-mono text-on-surface-variant tracking-wider uppercase flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+          <p className="text-sm text-on-surface-variant flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             {items.length} {t('inbox_opportunities_suffix')}
           </p>
         </div>
@@ -125,7 +125,7 @@ function InboxView({ items, isLoading, onSync }) {
                     </div>
                   </div>
 
-                  <div className="text-xs font-mono tabular-nums text-on-surface-variant/60 shrink-0 self-start md:self-center mt-2 md:mt-0">
+                  <div className="text-xs tabular-nums text-on-surface-variant/60 shrink-0 self-start md:self-center mt-2 md:mt-0">
                     {item.received_at ? new Date(item.received_at).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }) : ''}
                   </div>
                 </motion.div>

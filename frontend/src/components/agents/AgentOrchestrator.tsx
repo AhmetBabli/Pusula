@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, FileText, MessageSquare, Send, Terminal, Wifi, WifiOff, RotateCcw, Download, Activity, CheckCircle, AlertCircle, Mail } from 'lucide-react';
+import { Search, FileText, MessageSquare, Send, Terminal, Wifi, WifiOff, RotateCcw, Download, Activity, CheckCircle, AlertCircle, Mail, X } from 'lucide-react';
 import { useAgentWebSocket, AgentStates } from '../../hooks/useAgentWebSocket';
-import { useLanguage } from '../../i18n/LanguageContext';
+import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
+import { getToken } from '../../services/api';
 
 // ── API Çağrıları ──────────────────────────────────────────────────────────
 const API = '/api/agents';
 
 async function apiPost(path: string, body: object) {
+  const token = getToken() || '';
   const res = await fetch(`${API}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
   });
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || data.message || `${translateStatic('common_request_failed')} (${res.status})`);
+  }
+  return data;
 }
 
 // ── Ajan Kart Bileşeni ─────────────────────────────────────────────────────
@@ -22,7 +31,6 @@ interface AgentCardProps {
   title: string;
   subtitle: string;
   icon: React.ElementType;
-  color: string;
   status: string;
   step: string;
   progress: number;
@@ -31,7 +39,7 @@ interface AgentCardProps {
   children: React.ReactNode;
 }
 
-function AgentCard({ id, title, subtitle, icon: Icon, color, status, step, progress, data, onReset, children }: AgentCardProps) {
+function AgentCard({ title, subtitle, icon: Icon, status, step, progress, onReset, children }: AgentCardProps) {
   const { t } = useLanguage();
   const isRunning = status === 'running';
   const isDone = status === 'done';
@@ -42,7 +50,7 @@ function AgentCard({ id, title, subtitle, icon: Icon, color, status, step, progr
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className={`bg-surface-container border rounded-lg p-6 flex flex-col gap-5 transition-all duration-150 relative overflow-hidden
+      className={`bg-surface-container border rounded-xl p-7 flex flex-col gap-5 transition-all duration-150 relative overflow-hidden
       ${isRunning ? 'border-primary-container' :
         isDone ? 'border-emerald-500/30' :
           isFailed ? 'border-error/30' :
@@ -62,12 +70,12 @@ function AgentCard({ id, title, subtitle, icon: Icon, color, status, step, progr
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-11 h-11 rounded-md flex items-center justify-center bg-surface-container-highest border border-outline-variant/10" style={{ color }}>
+          <div className="w-11 h-11 rounded-lg flex items-center justify-center bg-primary/10 text-primary shrink-0">
             <Icon className="w-5 h-5" />
           </div>
           <div>
             <div className="text-base font-headline font-semibold text-on-surface">{title}</div>
-            <div className="text-xs font-mono tracking-widest text-on-surface-variant uppercase mt-1">{subtitle}</div>
+            <div className="text-xs text-on-surface-variant mt-1">{subtitle}</div>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -99,9 +107,12 @@ function AgentCard({ id, title, subtitle, icon: Icon, color, status, step, progr
       {isRunning && step && (
         <div className="text-sm font-body text-on-surface-variant animate-pulse">{step}</div>
       )}
+      {isFailed && step && (
+        <div className="text-sm font-body text-error line-clamp-2">{step}</div>
+      )}
 
       {/* Action content */}
-      <div className="mt-auto pt-2 border-t border-outline-variant/10">
+      <div className="mt-auto pt-5 border-t border-outline-variant/10">
         {children}
       </div>
     </motion.div>
@@ -114,31 +125,74 @@ export function AgentOrchestrator() {
   const { agents, sessionId, connected, logs, resetAgent } = useAgentWebSocket();
 
   // Web Search state
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLocation, setSearchLocation] = useState('İstanbul');
 
   // Outreach state
+  const [outreachExpanded, setOutreachExpanded] = useState(false);
   const [outreachCompany, setOutreachCompany] = useState('');
   const [outreachResult, setOutreachResult] = useState<{ cold_email?: string; linkedin_dm?: string } | null>(null);
 
   // CV Architect
   const [showTerminal, setShowTerminal] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    await apiPost('/search', { query: searchQuery, location: searchLocation, session_id: sessionId });
+    setActionError(null);
+    try {
+      await apiPost('/search', { query: searchQuery, location: searchLocation, session_id: sessionId });
+    } catch (err) {
+      setActionError((err as Error).message);
+    }
   };
 
   const handleBuildCv = async () => {
-    await apiPost('/build-cv', { session_id: sessionId });
+    setActionError(null);
+    try {
+      await apiPost('/build-cv', { session_id: sessionId });
+    } catch (err) {
+      setActionError((err as Error).message);
+    }
+  };
+
+  const handleDownloadCv = async (cvSessionId: string) => {
+    setActionError(null);
+    try {
+      const token = getToken() || '';
+      const res = await fetch(`${API}/cv/export-pdf/${cvSessionId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `PDF indirilemedi (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kariyer_cv_${cvSessionId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError((err as Error).message);
+    }
   };
 
   const handleOutreach = async () => {
     if (!outreachCompany.trim()) return;
-    await apiPost('/outreach', {
-      session_id: sessionId,
-      company_name: outreachCompany,
-    });
+    setActionError(null);
+    try {
+      await apiPost('/outreach', {
+        session_id: sessionId,
+        company_name: outreachCompany,
+      });
+    } catch (err) {
+      setActionError((err as Error).message);
+    }
   };
 
   // Outreach data gelince göster
@@ -157,11 +211,29 @@ export function AgentOrchestrator() {
           <h2 className="font-headline text-3xl md:text-4xl text-on-surface mb-2 font-bold tracking-tight">{t('agents_title')}</h2>
           <p className="font-body text-base text-on-surface-variant">{t('agents_subtitle')}</p>
         </div>
-        <div className={`flex items-center gap-2 px-4 py-2 rounded-full border w-fit ${connected ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-error/10 text-error border-error/20'}`}>
-          {connected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-          <span className="text-xs font-label uppercase tracking-wider">{connected ? t('agents_connected') : t('agents_disconnected')}</span>
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-label font-medium w-fit ${connected ? 'text-emerald-500' : 'text-error'}`}>
+          {connected ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+          {connected ? t('agents_connected') : t('agents_disconnected')}
         </div>
       </motion.header>
+
+      <AnimatePresence>
+        {actionError && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm"
+            role="alert"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="flex-1">{actionError}</span>
+            <button onClick={() => setActionError(null)} className="shrink-0 hover:opacity-70" aria-label="Kapat">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 4 Ajan Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -169,14 +241,23 @@ export function AgentOrchestrator() {
         {/* 1. Web Search Agent */}
         <AgentCard
           id="web_search" title={t('agents_research_title')} subtitle={t('agents_research_subtitle')}
-          icon={Search} color="#3B82F6"
+          icon={Search}
           status={agents.web_search.status} step={agents.web_search.step}
           progress={agents.web_search.progress} data={agents.web_search.data}
-          onReset={() => resetAgent('web_search')}
+          onReset={() => { resetAgent('web_search'); setSearchExpanded(false); }}
         >
-          {agents.web_search.status === 'idle' && (
+          {agents.web_search.status === 'idle' && !searchExpanded && (
+            <button
+              onClick={() => setSearchExpanded(true)}
+              className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
+            >
+              {t('agents_start_button')}
+            </button>
+          )}
+          {agents.web_search.status === 'idle' && searchExpanded && (
             <div className="flex flex-col sm:flex-row gap-3">
               <input
+                autoFocus
                 className="flex-[2] bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
                 placeholder={t('agents_search_query_placeholder')}
                 value={searchQuery}
@@ -211,7 +292,7 @@ export function AgentOrchestrator() {
         {/* 2. CV Architect Agent */}
         <AgentCard
           id="cv_architect" title={t('agents_cv_title')} subtitle={t('agents_cv_subtitle')}
-          icon={FileText} color="#A855F7"
+          icon={FileText}
           status={agents.cv_architect.status} step={agents.cv_architect.step}
           progress={agents.cv_architect.progress} data={agents.cv_architect.data}
           onReset={() => resetAgent('cv_architect')}
@@ -220,49 +301,58 @@ export function AgentOrchestrator() {
             <button
               onClick={handleBuildCv}
               disabled={!connected}
-              className="w-full py-3 text-sm font-label text-purple-500 bg-purple-500/10 border border-purple-500/20 rounded-md hover:bg-purple-500/20 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 flex items-center justify-center gap-2"
+              className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
             >
-              <Terminal className="w-4 h-4" /> {t('agents_cv_start_button')}
+              {t('agents_cv_start_button')}
             </button>
           )}
           {agents.cv_architect.status === 'done' && agents.cv_architect.data?.session_id && (
-            <a
-              href={`/api/agents/cv/export-pdf/${agents.cv_architect.data.session_id}`}
+            <button
+              onClick={() => handleDownloadCv(agents.cv_architect.data.session_id as string)}
               className="w-full flex items-center justify-center gap-2 py-3 text-sm font-label text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 active:scale-[0.98] transition-all duration-150"
             >
               <Download className="w-4 h-4" /> {t('agents_cv_download')}
-            </a>
+            </button>
           )}
         </AgentCard>
 
         {/* 3. Mülakat Koçu */}
         <AgentCard
           id="interview_coach" title={t('agents_interview_title')} subtitle={t('agents_interview_subtitle')}
-          icon={MessageSquare} color="#10B981"
+          icon={MessageSquare}
           status={agents.interview_coach.status} step={agents.interview_coach.step}
           progress={agents.interview_coach.progress} data={agents.interview_coach.data}
           onReset={() => resetAgent('interview_coach')}
         >
           <a
             href="#interview"
-            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-label text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 active:scale-[0.98] transition-all duration-150"
+            className="w-full flex items-center justify-center py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
           >
-            {t('agents_interview_open')} <Search className="w-4 h-4" />
+            {t('agents_interview_open')}
           </a>
         </AgentCard>
 
         {/* 4. İletişim Asistanı */}
         <AgentCard
           id="outreach" title={t('agents_outreach_title')} subtitle={t('agents_outreach_subtitle')}
-          icon={Send} color="#06B6D4"
+          icon={Send}
           status={agents.outreach.status} step={agents.outreach.step}
           progress={agents.outreach.progress} data={agents.outreach.data}
-          onReset={() => { resetAgent('outreach'); setOutreachResult(null); }}
+          onReset={() => { resetAgent('outreach'); setOutreachResult(null); setOutreachExpanded(false); }}
         >
-          {agents.outreach.status === 'idle' && (
+          {agents.outreach.status === 'idle' && !outreachExpanded && (
+            <button
+              onClick={() => setOutreachExpanded(true)}
+              className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
+            >
+              {t('agents_start_button')}
+            </button>
+          )}
+          {agents.outreach.status === 'idle' && outreachExpanded && (
             <div className="flex gap-3">
               <input
-                className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/40 transition-colors duration-150"
+                autoFocus
+                className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
                 placeholder={t('agents_outreach_company_placeholder')}
                 value={outreachCompany}
                 onChange={e => setOutreachCompany(e.target.value)}
@@ -271,7 +361,7 @@ export function AgentOrchestrator() {
               <button
                 onClick={handleOutreach}
                 disabled={!connected || !outreachCompany.trim()}
-                className="px-5 py-2.5 text-sm font-label bg-cyan-600 text-white rounded-md hover:bg-cyan-500 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+                className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
               >
                 {t('agents_outreach_generate')}
               </button>
@@ -280,14 +370,14 @@ export function AgentOrchestrator() {
           {outreachResult && (
             <div className="space-y-3 pt-2">
               <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-4">
-                <div className="text-xs font-label text-cyan-500 mb-2 flex items-center gap-1.5 uppercase tracking-wider"><Mail className="w-3.5 h-3.5"/> {t('agents_outreach_email_draft')}</div>
+                <div className="text-xs font-label font-semibold text-primary mb-2 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/> {t('agents_outreach_email_draft')}</div>
                 <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
                   {outreachResult.cold_email}
                 </pre>
               </div>
               {outreachResult.linkedin_dm && (
                 <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-4">
-                  <div className="text-xs font-label text-blue-500 mb-2 flex items-center gap-1.5 uppercase tracking-wider"><MessageSquare className="w-3.5 h-3.5"/> {t('agents_outreach_linkedin_draft')}</div>
+                  <div className="text-xs font-label font-semibold text-primary mb-2 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5"/> {t('agents_outreach_linkedin_draft')}</div>
                   <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
                     {outreachResult.linkedin_dm}
                   </pre>

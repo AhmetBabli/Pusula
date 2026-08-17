@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
-import { User, Zap, Menu, X, Bell, Globe, Sun, Moon } from 'lucide-react';
+import { User, Menu, X, Bell, Globe, Sun, Moon } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { LogoLockup } from '../ui/Logo';
 
 function Header({ userProfile = {}, onProfileClick, isLoading, isSidebarOpen, onToggleSidebar }) {
   const { language, setLanguage, t } = useLanguage();
@@ -24,15 +25,7 @@ function Header({ userProfile = {}, onProfileClick, isLoading, isSidebarOpen, on
           {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
 
-        <div className="flex flex-col">
-          <h1 className="text-lg font-headline font-bold text-on-surface tracking-tight flex items-center gap-2">
-            <span className="w-7 h-7 rounded-md bg-primary/15 flex items-center justify-center border border-primary/25">
-              <Zap className="w-3.5 h-3.5 text-primary" />
-            </span>
-            {t('app_title')}
-          </h1>
-          <span className="text-[10px] font-mono text-on-surface-variant tracking-[0.15em] uppercase ml-9">{t('app_subtitle')}</span>
-        </div>
+        <LogoLockup wordmark={t('app_title')} tagline={t('app_subtitle')} />
       </div>
 
       <div className="flex items-center gap-2">

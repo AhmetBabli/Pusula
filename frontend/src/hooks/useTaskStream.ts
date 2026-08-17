@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getToken } from '../services/api';
+import { translateStatic } from '../i18n/LanguageContext';
 
 export type TaskStatus = 'idle' | 'pending' | 'running' | 'done' | 'failed' | 'not_found';
 
@@ -77,7 +78,7 @@ export function useTaskStream() {
       setTask((prev) => ({
         ...prev,
         status: 'failed',
-        error: 'SSE bağlantısı kesildi.',
+        error: translateStatic('common_sse_disconnected'),
       }));
       close();
     };

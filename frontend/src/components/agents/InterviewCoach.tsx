@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, ChevronRight, RotateCcw, Loader2, Mail, CheckCircle2, AlertTriangle, Target, Search } from 'lucide-react';
-import { useLanguage } from '../../i18n/LanguageContext';
+import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
+import { getToken } from '../../services/api';
 
 interface Question {
   id: number;
@@ -27,6 +28,23 @@ interface InterviewCoachProps {
 
 const API = '/api/agents';
 
+async function apiPost(path: string, body: object) {
+  const token = getToken() || '';
+  const res = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || data.message || `${translateStatic('common_request_failed')} (${res.status})`);
+  }
+  return data;
+}
+
 export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription = '', jobId }: InterviewCoachProps) {
   const { t } = useLanguage();
   const [company, setCompany] = useState(companyName);
@@ -40,6 +58,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [loadingEval, setLoadingEval] = useState(false);
   const [phase, setPhase] = useState<'setup' | 'interview' | 'results'>('setup');
+  const [error, setError] = useState<string | null>(null);
 
   // Outreach Integration State
   const [outreachResult, setOutreachResult] = useState<{cold_email: string, linkedin_dm: string} | null>(null);
@@ -49,21 +68,17 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
   const generateOutreach = async () => {
     setLoadingOutreach(true);
+    setError(null);
     try {
-      const res = await fetch(`${API}/outreach/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          company_name: company || 'Hedef Şirket',
-          job_title: title || 'Pozisyon',
-          job_description: jobDescription
-        }),
+      const data = await apiPost('/outreach/sync', {
+        session_id: sessionId,
+        company_name: company || t('outreach_fallback_company'),
+        job_title: title || t('outreach_fallback_position'),
+        job_description: jobDescription
       });
-      const data = await res.json();
       setOutreachResult(data);
     } catch (err) {
-      console.error(err);
+      setError((err as Error).message);
     } finally {
       setLoadingOutreach(false);
     }
@@ -71,27 +86,25 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
   const startInterview = async () => {
     setLoadingQuestions(true);
+    setError(null);
     try {
-      const res = await fetch(`${API}/interview/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          company_name: company,
-          job_title: title,
-          job_description: jobDescription,
-          job_id: jobId,
-          round_type: roundType,
-          question_count: 5,
-        }),
+      const data = await apiPost('/interview/start', {
+        session_id: sessionId,
+        company_name: company,
+        job_title: title,
+        job_description: jobDescription,
+        job_id: jobId,
+        round_type: roundType,
+        question_count: 5,
       });
-      const data = await res.json();
       setQuestions(data.questions || []);
       setCurrentIdx(0);
       setHistory([]);
       setEvaluation(null);
       setAnswer('');
       setPhase('interview');
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoadingQuestions(false);
     }
@@ -100,26 +113,24 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const submitAnswer = async () => {
     if (!answer.trim() || !questions[currentIdx]) return;
     setLoadingEval(true);
+    setError(null);
     const q = questions[currentIdx];
     try {
-      const res = await fetch(`${API}/interview/answer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          question_id: q.id,
-          question: q.question,
-          question_type: q.type,
-          hint: q.hint,
-          answer,
-          company_name: company,
-          job_title: title,
-        }),
+      const data = await apiPost('/interview/answer', {
+        session_id: sessionId,
+        question_id: q.id,
+        question: q.question,
+        question_type: q.type,
+        hint: q.hint,
+        answer,
+        company_name: company,
+        job_title: title,
       });
-      const data = await res.json();
       const ev: Evaluation = data.evaluation;
       setEvaluation(ev);
       setHistory(prev => [...prev, { question: q, evaluation: ev }]);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoadingEval(false);
     }
@@ -157,7 +168,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 space-y-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-label text-on-surface-variant mb-2 uppercase tracking-wider">{t('interview_target_company')}</label>
+              <label className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_company')}</label>
               <input
                 className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-md px-4 py-3 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
                 placeholder={t('interview_target_company_placeholder')}
@@ -167,7 +178,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
             </div>
 
             <div>
-              <label className="block text-xs font-label text-on-surface-variant mb-2 uppercase tracking-wider">{t('interview_target_position')}</label>
+              <label className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_position')}</label>
               <input
                 className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-md px-4 py-3 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
                 placeholder={t('interview_target_position_placeholder')}
@@ -177,7 +188,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
             </div>
 
             <div>
-              <label className="block text-xs font-label text-on-surface-variant mb-2 uppercase tracking-wider">{t('interview_type_label')}</label>
+              <label className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_type_label')}</label>
               <div className="flex gap-3">
                 {(['technical', 'hr', 'mixed'] as const).map(rt => (
                   <button
@@ -195,6 +206,13 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
               </div>
             </div>
           </div>
+
+          {error && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
           <button
             onClick={startInterview}
@@ -219,12 +237,12 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="md:col-span-1 bg-surface-container border border-outline-variant/10 rounded-lg p-6 text-center flex flex-col justify-center">
-            <div className={`text-6xl font-mono tabular-nums font-bold mb-2 ${scoreColor(avgScore)}`}>{avgScore}</div>
-            <div className="text-xs font-label text-on-surface-variant uppercase tracking-wider">{t('interview_average_score')}</div>
+            <div className={`text-6xl tabular-nums font-bold mb-2 ${scoreColor(avgScore)}`}>{avgScore}</div>
+            <div className="text-xs font-label font-medium text-on-surface-variant">{t('interview_average_score')}</div>
           </div>
 
           <div className="md:col-span-2 bg-surface-container border border-outline-variant/10 rounded-lg p-6 flex flex-col justify-center">
-            <h3 className="text-sm font-label text-on-surface mb-4 uppercase tracking-wider">{t('interview_summary_verdict')}</h3>
+            <h3 className="text-sm font-label font-semibold text-on-surface mb-4">{t('interview_summary_verdict')}</h3>
             <p className="text-sm font-body text-on-surface-variant leading-relaxed">
               {avgScore >= 80 ? t('interview_verdict_strong') :
                avgScore >= 60 ? t('interview_verdict_moderate') :
@@ -234,12 +252,12 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-sm font-label text-on-surface uppercase tracking-wider mb-2">{t('interview_question_breakdown')}</h3>
+          <h3 className="text-sm font-label font-semibold text-on-surface mb-2">{t('interview_question_breakdown')}</h3>
           {history.map((h, i) => (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} key={i} className="bg-surface-container border border-outline-variant/10 rounded-lg p-5 space-y-3 hover:border-outline-variant/20 transition-colors duration-150">
               <div className="flex justify-between items-start gap-6">
                 <div className="text-base font-headline font-medium text-on-surface">{h.question.question}</div>
-                <span className={`text-xl font-mono tabular-nums font-bold shrink-0 ${scoreColor(h.evaluation.score)}`}>{h.evaluation.score}</span>
+                <span className={`text-xl tabular-nums font-bold shrink-0 ${scoreColor(h.evaluation.score)}`}>{h.evaluation.score}</span>
               </div>
               <div className="text-sm font-body text-on-surface-variant bg-surface-container-highest p-4 rounded-lg">{h.evaluation.feedback}</div>
             </motion.div>
@@ -251,7 +269,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="text-lg font-headline font-semibold text-on-surface flex items-center gap-2 mb-1">
-                <Send className="w-5 h-5 text-cyan-500" />
+                <Send className="w-5 h-5 text-primary" />
                 {t('interview_outreach_title')}
               </div>
               <div className="text-sm font-body text-on-surface-variant">{t('interview_outreach_desc')}</div>
@@ -260,23 +278,30 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
               <button
                 onClick={generateOutreach}
                 disabled={loadingOutreach}
-                className="px-5 py-2.5 text-sm font-label bg-cyan-500/10 text-cyan-500 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 active:scale-[0.97] transition-all duration-150 flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100 shrink-0"
+                className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] transition-all duration-150 flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100 shrink-0"
               >
                 {loadingOutreach ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('interview_outreach_generating')}</> : t('interview_outreach_generate_draft')}
               </button>
             )}
           </div>
 
+          {error && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           {outreachResult && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-surface-container border border-cyan-500/20 rounded-md p-5">
-                <div className="text-xs font-label text-cyan-500 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/> {t('interview_outreach_cold_email')}</div>
+              <div className="bg-surface-container border border-outline-variant/10 rounded-md p-5">
+                <div className="text-xs font-label font-semibold text-primary mb-3 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/> {t('interview_outreach_cold_email')}</div>
                 <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
                   {outreachResult.cold_email}
                 </pre>
               </div>
-              <div className="bg-surface-container border border-blue-500/20 rounded-md p-5">
-                <div className="text-xs font-label text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5"/> {t('interview_outreach_linkedin_dm')}</div>
+              <div className="bg-surface-container border border-outline-variant/10 rounded-md p-5">
+                <div className="text-xs font-label font-semibold text-primary mb-3 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5"/> {t('interview_outreach_linkedin_dm')}</div>
                 <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
                   {outreachResult.linkedin_dm}
                 </pre>
@@ -303,7 +328,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-3xl mx-auto space-y-6" id="interview">
       {/* Progress */}
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-label text-on-surface-variant uppercase tracking-wider">
+        <div className="text-xs font-label font-medium text-on-surface-variant">
           {t('interview_question_progress')} {currentIdx + 1} / {questions.length}
         </div>
         <span className={`text-xs font-label px-3 py-1 rounded-md border ${
@@ -343,6 +368,12 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
               value={answer}
               onChange={e => setAnswer(e.target.value)}
             />
+            {error && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
             <div className="flex justify-end">
               <button
                 onClick={submitAnswer}
@@ -357,15 +388,15 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
           <motion.div key="evaluation" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 pt-4">
             <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 space-y-6">
               <div className="flex items-center justify-between pb-4 border-b border-outline-variant/10">
-                <span className="text-sm font-label text-on-surface-variant uppercase tracking-wider">{t('interview_evaluation')}</span>
-                <span className={`text-4xl font-mono tabular-nums font-bold ${scoreColor(evaluation.score)}`}>{evaluation.score}</span>
+                <span className="text-sm font-label font-medium text-on-surface-variant">{t('interview_evaluation')}</span>
+                <span className={`text-4xl tabular-nums font-bold ${scoreColor(evaluation.score)}`}>{evaluation.score}</span>
               </div>
 
               <p className="text-base font-body text-on-surface leading-relaxed">{evaluation.feedback}</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                 <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-md p-4">
-                  <div className="text-xs font-label text-emerald-500 mb-3 flex items-center gap-1.5 uppercase tracking-wider"><CheckCircle2 className="w-3.5 h-3.5"/> {t('cv_strengths')}</div>
+                  <div className="text-xs font-label font-semibold text-emerald-500 mb-3 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> {t('cv_strengths')}</div>
                   <ul className="space-y-2">
                     {evaluation.strengths.map((s, i) => (
                       <li key={i} className="flex gap-2 text-sm font-body text-on-surface-variant"><span className="text-emerald-500 mt-0.5">•</span><span>{s}</span></li>
@@ -373,7 +404,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
                   </ul>
                 </div>
                 <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-md p-4">
-                  <div className="text-xs font-label text-yellow-500 mb-3 flex items-center gap-1.5 uppercase tracking-wider"><AlertTriangle className="w-3.5 h-3.5"/> {t('cv_weaknesses')}</div>
+                  <div className="text-xs font-label font-semibold text-yellow-500 mb-3 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> {t('cv_weaknesses')}</div>
                   <ul className="space-y-2">
                     {evaluation.improvements.map((s, i) => (
                       <li key={i} className="flex gap-2 text-sm font-body text-on-surface-variant"><span className="text-yellow-500 mt-0.5">•</span><span>{s}</span></li>

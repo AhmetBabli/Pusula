@@ -13,9 +13,12 @@ const THEME_STORAGE_KEY = 'theme';
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 function getInitialTheme(): Theme {
+  // Pusula açık temayı varsayılan olarak kullanır (marka kararı) — sistem
+  // tercihi burada kasıtlı olarak sorulmuyor, kullanıcı isterse üstteki
+  // düğmeden kendi tercihini seçip kaydedebiliyor.
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'light';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

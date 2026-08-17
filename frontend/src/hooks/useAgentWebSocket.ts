@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getToken } from '../services/api';
+import { translateStatic } from '../i18n/LanguageContext';
 
 export interface AgentEvent {
   agent: string;
@@ -56,7 +57,7 @@ export function useAgentWebSocket() {
 
     ws.onopen = () => {
       setConnected(true);
-      addLog('✅ Ajan sistemi bağlantısı kuruldu.');
+      addLog(`✅ ${translateStatic('ws_connected')}`);
     };
 
     ws.onmessage = (e) => {
@@ -76,12 +77,12 @@ export function useAgentWebSocket() {
 
     ws.onclose = () => {
       setConnected(false);
-      addLog('🔌 Bağlantı kesildi. Yeniden bağlanılıyor...');
+      addLog(`🔌 ${translateStatic('ws_reconnecting')}`);
       setTimeout(connect, 3000); // Auto-reconnect
     };
 
     ws.onerror = () => {
-      addLog('❌ WebSocket bağlantı hatası.');
+      addLog(`❌ ${translateStatic('ws_error')}`);
     };
   }, [addLog]);
 

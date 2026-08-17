@@ -5,6 +5,25 @@ import CyberModal from '../ui/CyberModal';
 import * as api from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
 
+function ScoreRing({ score, analyzed, pendingLabel }) {
+  const pct = Math.round(score || 0);
+  const tone = !analyzed ? 'rgb(var(--color-on-surface-variant))' : pct >= 70 ? '#1E7F5C' : pct >= 50 ? '#B4740E' : '#B23B3B';
+  return (
+    <div
+      className="relative w-16 h-16 rounded-full flex items-center justify-center shrink-0"
+      style={{ background: analyzed ? `conic-gradient(${tone} ${pct * 3.6}deg, rgb(var(--color-surface-container-high)) 0deg)` : 'rgb(var(--color-surface-container-high))' }}
+    >
+      <div className="absolute inset-[3px] rounded-full bg-surface-container-lowest flex items-center justify-center">
+        {analyzed ? (
+          <span className="text-base font-bold tabular-nums" style={{ color: tone }}>{pct}</span>
+        ) : (
+          <span className="text-[10px] font-label text-on-surface-variant text-center leading-tight px-1">{pendingLabel}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
   const { t } = useLanguage();
   const [selectedCV, setSelectedCV] = useState(null);
@@ -55,7 +74,7 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
             </div>
             <h2 className="text-3xl font-headline font-bold text-on-surface tracking-tight">{t('cv_title')}</h2>
           </div>
-          <p className="text-sm font-mono text-on-surface-variant tracking-wider uppercase flex items-center gap-2">
+          <p className="text-sm text-on-surface-variant flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             {cvs.length} {t('cv_ats_active_suffix')}
           </p>
@@ -91,50 +110,84 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
             <span className="text-sm font-body text-on-surface-variant">{t('cv_empty_desc')}</span>
           </motion.div>
         ) : (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="show"
-            className="space-y-3"
-          >
-            <AnimatePresence>
-              {cvs.map(cv => {
-                const score = Math.round(cv.ats_score || 0);
-                const scoreColor = score > 70 ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : score > 50 ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20' : 'text-red-500 bg-red-500/10 border-red-500/20';
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="flex flex-col gap-8">
+            {(() => {
+              const defaultCV = cvs.find(cv => cv.is_default) || cvs[0];
+              const otherCVs = cvs.filter(cv => cv.id !== defaultCV.id);
+              const analyzed = !!defaultCV.ats_feedback;
 
-                return (
+              return (
+                <>
                   <motion.div
-                    key={cv.id}
                     variants={itemVariants}
-                    layout
-                    onClick={() => handleCardClick(cv)}
-                    className={`group bg-surface-container hover:bg-surface-container-high border ${cv.is_default ? 'border-primary/30' : 'border-outline-variant/10 hover:border-outline-variant/20'} p-5 rounded-lg transition-all duration-150 flex flex-col md:flex-row gap-4 md:items-center justify-between cursor-pointer`}
+                    onClick={() => handleCardClick(defaultCV)}
+                    className="group bg-surface-container border border-primary/25 hover:border-primary/40 p-6 md:p-7 rounded-xl transition-all duration-150 flex flex-col md:flex-row gap-6 md:items-center cursor-pointer"
                   >
+                    <ScoreRing score={defaultCV.ats_score} analyzed={analyzed} pendingLabel={t('cv_ats_pending')} />
                     <div className="flex-1 flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-headline font-medium text-on-surface group-hover:text-primary transition-colors duration-150">{cv.title}</h3>
-                        {cv.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-label font-bold bg-primary/15 text-primary uppercase">{t('cv_default_badge')}</span>}
-                        {cv.is_ai_generated && <span className="px-2 py-0.5 rounded text-[10px] font-label font-bold bg-secondary/15 text-secondary uppercase">{t('cv_ai_generated_badge')}</span>}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-label font-bold text-primary uppercase tracking-wide flex items-center gap-1">
+                          <Star className="w-3 h-3" fill="currentColor" /> {t('cv_default_badge')}
+                        </span>
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-4 text-sm font-body text-on-surface-variant">
-                        <span>{cv.variant_type}</span>
-                        <span className="px-2.5 py-1 rounded-md bg-outline-variant/5 text-xs font-label text-on-surface/80">{cv.file_path ? t('cv_pdf') : t('cv_text')}</span>
+                      <h3 className="text-xl font-headline font-medium text-on-surface group-hover:text-primary transition-colors duration-150">{defaultCV.title}</h3>
+                      <div className="flex flex-wrap items-center gap-3 text-sm font-body text-on-surface-variant">
+                        <span>{defaultCV.variant_type}</span>
+                        <span className="px-2.5 py-1 rounded-md bg-outline-variant/5 text-xs font-label text-on-surface/80">{defaultCV.file_path ? t('cv_pdf') : t('cv_text')}</span>
+                        {defaultCV.is_ai_generated && <span className="px-2 py-0.5 rounded text-[10px] font-label font-bold bg-secondary/15 text-secondary">{t('cv_ai_generated_badge')}</span>}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className={`flex items-center justify-center px-4 py-2 rounded-md border font-mono font-bold text-lg tabular-nums ${scoreColor}`}>
-                        {score}
-                      </div>
-                      <button className="px-4 py-2 rounded-md bg-outline-variant/5 hover:bg-outline-variant/10 active:scale-[0.97] text-on-surface text-sm font-label transition-all duration-150">
-                        {t('cv_detail_button')}
-                      </button>
-                    </div>
+                    <button className="px-5 py-2.5 rounded-md bg-primary-container text-white text-sm font-label hover:bg-blue-700 active:scale-[0.97] transition-all duration-150 shrink-0">
+                      {t('cv_detail_button')}
+                    </button>
                   </motion.div>
-                );
-              })}
-            </AnimatePresence>
+
+                  {otherCVs.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      <h3 className="text-sm font-label font-semibold text-on-surface-variant">{t('cv_others_title')}</h3>
+                      <AnimatePresence>
+                        {otherCVs.map(cv => {
+                          const cvAnalyzed = !!cv.ats_feedback;
+                          const cvScore = Math.round(cv.ats_score || 0);
+                          const scoreColor = !cvAnalyzed
+                            ? 'text-on-surface-variant bg-outline-variant/5 border-outline-variant/15'
+                            : cvScore > 70 ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : cvScore > 50 ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20' : 'text-red-500 bg-red-500/10 border-red-500/20';
+
+                          return (
+                            <motion.div
+                              key={cv.id}
+                              variants={itemVariants}
+                              layout
+                              onClick={() => handleCardClick(cv)}
+                              className="group bg-surface-container hover:bg-surface-container-high border border-outline-variant/10 hover:border-outline-variant/20 p-5 rounded-lg transition-all duration-150 flex flex-col md:flex-row gap-4 md:items-center justify-between cursor-pointer"
+                            >
+                              <div className="flex-1 flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-lg font-headline font-medium text-on-surface group-hover:text-primary transition-colors duration-150">{cv.title}</h3>
+                                  {cv.is_ai_generated && <span className="px-2 py-0.5 rounded text-[10px] font-label font-bold bg-secondary/15 text-secondary">{t('cv_ai_generated_badge')}</span>}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-4 text-sm font-body text-on-surface-variant">
+                                  <span>{cv.variant_type}</span>
+                                  <span className="px-2.5 py-1 rounded-md bg-outline-variant/5 text-xs font-label text-on-surface/80">{cv.file_path ? t('cv_pdf') : t('cv_text')}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className={`flex items-center justify-center px-4 py-2 rounded-md border font-bold text-lg tabular-nums ${scoreColor}`}>
+                                  {cvAnalyzed ? cvScore : '—'}
+                                </div>
+                                <button className="px-4 py-2 rounded-md bg-outline-variant/5 hover:bg-outline-variant/10 active:scale-[0.97] text-on-surface text-sm font-label transition-all duration-150">
+                                  {t('cv_detail_button')}
+                                </button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </motion.div>
         )}
       </div>
@@ -148,15 +201,17 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
         {selectedCV && (
           <div className="flex flex-col gap-6">
             <div className="flex flex-col items-center justify-center p-6 rounded-md bg-surface-container-lowest border border-outline-variant/10 text-center">
-              <div className="text-5xl font-mono font-semibold tabular-nums text-on-surface">
-                {Math.round(selectedCV.ats_score || 0)}<span className="text-2xl text-on-surface-variant">/100</span>
+              <div className="text-5xl font-semibold tabular-nums text-on-surface">
+                {selectedCV.ats_feedback ? Math.round(selectedCV.ats_score || 0) : '—'}<span className="text-2xl text-on-surface-variant">/100</span>
               </div>
-              <div className="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-2">{t('cv_ats_score')}</div>
+              <div className="text-xs font-label text-on-surface-variant mt-2">
+                {selectedCV.ats_feedback ? t('cv_ats_score') : t('cv_ats_pending')}
+              </div>
             </div>
 
             {selectedCV.ats_feedback && (
               <div className="space-y-2">
-                <h4 className="text-sm font-label tracking-wider text-primary uppercase">{t('cv_ai_feedback')}</h4>
+                <h4 className="text-sm font-label font-semibold text-primary">{t('cv_ai_feedback')}</h4>
                 <p className="text-sm font-body text-on-surface leading-relaxed p-4 rounded-md bg-primary-container/5 border border-primary-container/20 whitespace-pre-wrap">
                   {selectedCV.ats_feedback}
                 </p>
@@ -165,7 +220,7 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
 
             {selectedCV.strengths?.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-label tracking-wider text-emerald-500 uppercase flex items-center gap-2">
+                <h4 className="text-sm font-label font-semibold text-emerald-500 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" /> {t('cv_strengths')}
                 </h4>
                 <ul className="space-y-2">
@@ -180,7 +235,7 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
 
             {selectedCV.weaknesses?.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-label tracking-wider text-secondary uppercase flex items-center gap-2">
+                <h4 className="text-sm font-label font-semibold text-secondary flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" /> {t('cv_weaknesses')}
                 </h4>
                 <ul className="space-y-2">
@@ -195,7 +250,7 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
 
             {selectedCV.extracted_text && (
               <div className="space-y-2">
-                <h4 className="text-sm font-label tracking-wider text-on-surface-variant uppercase">{t('cv_content')}</h4>
+                <h4 className="text-sm font-label font-semibold text-on-surface-variant">{t('cv_content')}</h4>
                 <pre className="text-xs font-mono text-on-surface-variant leading-relaxed p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10 whitespace-pre-wrap max-h-64 overflow-y-auto">{selectedCV.extracted_text}</pre>
               </div>
             )}

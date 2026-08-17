@@ -243,7 +243,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={loading}
                       className="w-full bg-surface-container-highest border border-outline-variant/15 rounded-xl py-3 pl-11 pr-4 text-sm text-on-surface font-body placeholder-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all disabled:opacity-50"
-                      placeholder={t('auth_email_placeholder')}
                     />
                   </div>
                 </div>

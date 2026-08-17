@@ -335,7 +335,6 @@ const translations: Translations = {
   auth_full_name: { tr: 'Ad Soyad', en: 'Full Name' },
   auth_full_name_placeholder: { tr: 'Adınız Soyadınız', en: 'Your Full Name' },
   auth_email: { tr: 'E-Posta', en: 'Email' },
-  auth_email_placeholder: { tr: 'ornek@sirket.com', en: 'example@company.com' },
   auth_password: { tr: 'Şifre', en: 'Password' },
   auth_waiting: { tr: 'Bekleyin...', en: 'Please wait...' },
   auth_login_submit: { tr: 'Sisteme Giriş Yap', en: 'Log In to System' },

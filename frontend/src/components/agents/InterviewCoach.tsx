@@ -168,8 +168,9 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 space-y-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_company')}</label>
+              <label htmlFor="interview-company" className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_company')}</label>
               <input
+                id="interview-company"
                 className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-md px-4 py-3 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
                 placeholder={t('interview_target_company_placeholder')}
                 value={company}
@@ -178,8 +179,9 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
             </div>
 
             <div>
-              <label className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_position')}</label>
+              <label htmlFor="interview-position" className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_position')}</label>
               <input
+                id="interview-position"
                 className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-md px-4 py-3 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
                 placeholder={t('interview_target_position_placeholder')}
                 value={title}

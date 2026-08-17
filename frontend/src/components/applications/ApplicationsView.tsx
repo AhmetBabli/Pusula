@@ -65,6 +65,7 @@ function CustomQuestionsBox({ appId, onSubmit, labels }) {
     <div className="flex flex-col gap-2 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
       <span className="text-xs font-body text-on-surface-variant">{labels.hint}</span>
       <textarea
+        aria-label={labels.hint}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={labels.placeholder}
@@ -170,6 +171,7 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            aria-label={t('applications_filter_label')}
             className="bg-transparent border-none text-sm text-on-surface font-label focus:ring-0 cursor-pointer pr-8 pl-4 py-2"
           >
             <option value="" className="bg-surface-container">{t('applications_filter_all')}</option>
@@ -258,10 +260,11 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
                     {/* E-posta ile onaylı gönderim: onay öncesi düzenlenebilir alan */}
                     {app.status === 'awaiting_approval' && (
                       <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-1.5 text-xs font-label text-on-surface-variant">
+                        <label htmlFor={`contact-email-${app.id}`} className="flex items-center gap-1.5 text-xs font-label text-on-surface-variant">
                           <Mail className="w-3.5 h-3.5" /> {t('applications_contact_email_label')}
                         </label>
                         <input
+                          id={`contact-email-${app.id}`}
                           type="email"
                           value={emailFor(app)}
                           onChange={(e) => setEmailDrafts((prev) => ({ ...prev, [app.id]: e.target.value }))}

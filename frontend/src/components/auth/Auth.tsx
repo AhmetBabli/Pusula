@@ -214,10 +214,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               >
                 {mode === 'register' && (
                   <div className="space-y-2">
-                    <label className="text-xs font-label font-medium text-on-surface-variant">{t('auth_full_name')}</label>
+                    <label htmlFor="auth-full-name" className="text-xs font-label font-medium text-on-surface-variant">{t('auth_full_name')}</label>
                     <div className="relative group">
                       <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant group-focus-within:text-primary transition-colors" />
                       <input
+                        id="auth-full-name"
                         type="text"
                         required
                         value={fullName}
@@ -231,10 +232,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-xs font-label font-medium text-on-surface-variant">{t('auth_email')}</label>
+                  <label htmlFor="auth-email" className="text-xs font-label font-medium text-on-surface-variant">{t('auth_email')}</label>
                   <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant group-focus-within:text-primary transition-colors" />
                     <input
+                      id="auth-email"
                       type="email"
                       required
                       value={email}
@@ -247,12 +249,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-label font-medium text-on-surface-variant flex justify-between">
+                  <label htmlFor="auth-password" className="text-xs font-label font-medium text-on-surface-variant flex justify-between">
                     <span>{t('auth_password')}</span>
                   </label>
                   <div className="relative group">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant group-focus-within:text-primary transition-colors" />
                     <input
+                      id="auth-password"
                       type="password"
                       required
                       minLength={8}

@@ -221,37 +221,37 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className={labelClass}>{t('profile_full_name')}</label>
-                    <input type="text" value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })} className={inputClass} />
+                    <label htmlFor="profile-full-name" className={labelClass}>{t('profile_full_name')}</label>
+                    <input id="profile-full-name" type="text" value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })} className={inputClass} />
                   </div>
                   <div>
-                    <label className={`${labelClass} flex items-center gap-1.5`}><Mail className="w-3.5 h-3.5" /> {t('profile_email')}</label>
-                    <input type="email" value={formData.email || ''} disabled className={`${inputClass} bg-surface-container-lowest/50 border-outline-variant/10 text-on-surface-variant cursor-not-allowed`} />
+                    <label htmlFor="profile-email" className={`${labelClass} flex items-center gap-1.5`}><Mail className="w-3.5 h-3.5" /> {t('profile_email')}</label>
+                    <input id="profile-email" type="email" value={formData.email || ''} disabled className={`${inputClass} bg-surface-container-lowest/50 border-outline-variant/10 text-on-surface-variant cursor-not-allowed`} />
                   </div>
                   <div>
-                    <label className={labelClass}>{t('profile_university')}</label>
-                    <input type="text" value={formData.university || ''} onChange={e => setFormData({ ...formData, university: e.target.value })} className={inputClass} />
+                    <label htmlFor="profile-university" className={labelClass}>{t('profile_university')}</label>
+                    <input id="profile-university" type="text" value={formData.university || ''} onChange={e => setFormData({ ...formData, university: e.target.value })} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>{t('profile_department')}</label>
-                    <input type="text" value={formData.department || ''} onChange={e => setFormData({ ...formData, department: e.target.value })} className={inputClass} />
+                    <label htmlFor="profile-department" className={labelClass}>{t('profile_department')}</label>
+                    <input id="profile-department" type="text" value={formData.department || ''} onChange={e => setFormData({ ...formData, department: e.target.value })} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>{t('profile_graduation_year')}</label>
-                    <input type="number" value={formData.graduation_year ?? ''} onChange={e => setFormData({ ...formData, graduation_year: e.target.value ? parseInt(e.target.value, 10) : null })} className={inputClass} />
+                    <label htmlFor="profile-graduation-year" className={labelClass}>{t('profile_graduation_year')}</label>
+                    <input id="profile-graduation-year" type="number" value={formData.graduation_year ?? ''} onChange={e => setFormData({ ...formData, graduation_year: e.target.value ? parseInt(e.target.value, 10) : null })} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>LinkedIn</label>
-                    <input type="url" value={formData.linkedin_url || ''} onChange={e => setFormData({ ...formData, linkedin_url: e.target.value })} placeholder="https://linkedin.com/in/..." className={inputClass} />
+                    <label htmlFor="profile-linkedin" className={labelClass}>LinkedIn</label>
+                    <input id="profile-linkedin" type="url" value={formData.linkedin_url || ''} onChange={e => setFormData({ ...formData, linkedin_url: e.target.value })} placeholder="https://linkedin.com/in/..." className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>GitHub</label>
-                    <input type="url" value={formData.github_url || ''} onChange={e => setFormData({ ...formData, github_url: e.target.value })} placeholder="https://github.com/..." className={inputClass} />
+                    <label htmlFor="profile-github" className={labelClass}>GitHub</label>
+                    <input id="profile-github" type="url" value={formData.github_url || ''} onChange={e => setFormData({ ...formData, github_url: e.target.value })} placeholder="https://github.com/..." className={inputClass} />
                   </div>
                 </div>
                 <div>
-                  <label className={labelClass}>{t('profile_summary')}</label>
-                  <textarea value={formData.summary || ''} onChange={e => setFormData({ ...formData, summary: e.target.value })} rows={3} className={`${inputClass} resize-none`} />
+                  <label htmlFor="profile-summary" className={labelClass}>{t('profile_summary')}</label>
+                  <textarea id="profile-summary" value={formData.summary || ''} onChange={e => setFormData({ ...formData, summary: e.target.value })} rows={3} className={`${inputClass} resize-none`} />
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-2 border-t border-outline-variant/10">
@@ -280,7 +280,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
 
             <div className="space-y-5">
               <div>
-                <label className={labelClass}>{t('profile_skills_title')}</label>
+                <label htmlFor="profile-skill-input" className={labelClass}>{t('profile_skills_title')}</label>
                 <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-lg p-3 min-h-[52px]">
                   <div className="flex flex-wrap gap-2">
                     {(formData.skills || []).map(skill => (
@@ -292,6 +292,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                       </div>
                     ))}
                     <input
+                      id="profile-skill-input"
                       type="text"
                       placeholder={t('profile_skill_placeholder')}
                       className="flex-grow bg-transparent border-none focus:outline-none focus:ring-0 text-sm text-on-surface min-w-[160px] placeholder-on-surface-variant/40 p-1"
@@ -302,7 +303,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
               </div>
 
               <div>
-                <label className={labelClass}>{t('profile_sectors_title')}</label>
+                <label htmlFor="profile-sector-input" className={labelClass}>{t('profile_sectors_title')}</label>
                 <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-lg p-3 min-h-[52px]">
                   <div className="flex flex-wrap gap-2">
                     {(formData.target_sectors || []).map(sector => (
@@ -314,6 +315,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                       </div>
                     ))}
                     <input
+                      id="profile-sector-input"
                       type="text"
                       placeholder={t('profile_sector_placeholder')}
                       className="flex-grow bg-transparent border-none focus:outline-none focus:ring-0 text-sm text-on-surface min-w-[160px] placeholder-on-surface-variant/40 p-1"
@@ -324,7 +326,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
               </div>
 
               <div>
-                <label className={labelClass}>{t('profile_languages_title')}</label>
+                <label htmlFor="profile-language-input" className={labelClass}>{t('profile_languages_title')}</label>
                 <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-lg p-3 min-h-[52px]">
                   <div className="flex flex-wrap gap-2">
                     {(formData.languages || []).map(lang => (
@@ -336,6 +338,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                       </div>
                     ))}
                     <input
+                      id="profile-language-input"
                       type="text"
                       placeholder={t('profile_language_placeholder')}
                       className="flex-grow bg-transparent border-none focus:outline-none focus:ring-0 text-sm text-on-surface min-w-[160px] placeholder-on-surface-variant/40 p-1"
@@ -386,6 +389,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                     value={geminiKeyInput}
                     onChange={e => setGeminiKeyInput(e.target.value)}
                     placeholder={formData.has_gemini_api_key ? t('profile_gemini_key_placeholder_set') : t('profile_gemini_key_placeholder_empty')}
+                    aria-label={t('profile_gemini_key_title')}
                     autoComplete="off"
                     className="w-full bg-surface-container-lowest border border-outline-variant/15 rounded-md pl-3 pr-9 py-2.5 font-body text-sm text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all"
                   />

@@ -182,6 +182,7 @@ function JobsView({ jobs, isLoading, onJobAction }) {
           <input
             type="text"
             placeholder={t('jobs_search_placeholder')}
+            aria-label={t('jobs_search_placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-transparent border-none w-full text-sm font-body text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"

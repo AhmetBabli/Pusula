@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { motion } from 'framer-motion';
 import { GraduationCap, Code, Target, Languages, X, ArrowRight, AlertCircle } from 'lucide-react';
 import { getProfile, updateProfile } from '../../services/api';
@@ -63,6 +63,7 @@ function AutocompleteInput({ label, icon: Icon, value, onChange, suggestions, re
   required?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const inputId = useId();
   const query = value.trim().toLowerCase();
   const filtered = query
     ? suggestions.filter((s) => s.toLowerCase().includes(query)).slice(0, 8)
@@ -70,10 +71,11 @@ function AutocompleteInput({ label, icon: Icon, value, onChange, suggestions, re
 
   return (
     <div className="space-y-2 relative">
-      <label className="font-label text-sm text-on-surface-variant flex items-center gap-1.5">
+      <label htmlFor={inputId} className="font-label text-sm text-on-surface-variant flex items-center gap-1.5">
         <Icon className="w-3.5 h-3.5" /> {label} {required && '*'}
       </label>
       <input
+        id={inputId}
         type="text"
         value={value}
         onChange={(e) => { onChange(e.target.value); setOpen(true); }}
@@ -96,6 +98,7 @@ function TagInput({ label, icon: Icon, values, onChange, placeholder, suggestion
 }) {
   const [inputValue, setInputValue] = useState('');
   const [open, setOpen] = useState(false);
+  const inputId = useId();
 
   const remove = (v: string) => onChange(values.filter((x) => x !== v));
   const add = (v: string) => {
@@ -112,7 +115,7 @@ function TagInput({ label, icon: Icon, values, onChange, placeholder, suggestion
 
   return (
     <div className="space-y-2 relative">
-      <label className="font-label text-sm text-on-surface-variant flex items-center gap-1.5">
+      <label htmlFor={inputId} className="font-label text-sm text-on-surface-variant flex items-center gap-1.5">
         <Icon className="w-3.5 h-3.5" /> {label}
       </label>
       <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-lg p-3 min-h-[56px]">
@@ -130,6 +133,7 @@ function TagInput({ label, icon: Icon, values, onChange, placeholder, suggestion
             </div>
           ))}
           <input
+            id={inputId}
             type="text"
             value={inputValue}
             placeholder={placeholder}
@@ -218,8 +222,9 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
               required
             />
             <div className="space-y-2">
-              <label className="font-label text-sm text-on-surface-variant block">{t('intake_department')} *</label>
+              <label htmlFor="intake-department" className="font-label text-sm text-on-surface-variant block">{t('intake_department')} *</label>
               <input
+                id="intake-department"
                 type="text"
                 value={data.department}
                 onChange={(e) => setData({ ...data, department: e.target.value })}
@@ -227,8 +232,9 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <label className="font-label text-sm text-on-surface-variant block">{t('intake_graduation_year')}</label>
+              <label htmlFor="intake-graduation-year" className="font-label text-sm text-on-surface-variant block">{t('intake_graduation_year')}</label>
               <input
+                id="intake-graduation-year"
                 type="number"
                 value={data.graduation_year ?? ''}
                 onChange={(e) => setData({ ...data, graduation_year: e.target.value ? parseInt(e.target.value, 10) : null })}
@@ -243,8 +249,9 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="font-label text-sm text-on-surface-variant block">LinkedIn</label>
+              <label htmlFor="intake-linkedin" className="font-label text-sm text-on-surface-variant block">LinkedIn</label>
               <input
+                id="intake-linkedin"
                 type="url"
                 value={data.linkedin_url}
                 onChange={(e) => setData({ ...data, linkedin_url: e.target.value })}
@@ -253,8 +260,9 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
               />
             </div>
             <div className="space-y-2">
-              <label className="font-label text-sm text-on-surface-variant block">GitHub</label>
+              <label htmlFor="intake-github" className="font-label text-sm text-on-surface-variant block">GitHub</label>
               <input
+                id="intake-github"
                 type="url"
                 value={data.github_url}
                 onChange={(e) => setData({ ...data, github_url: e.target.value })}
@@ -265,8 +273,9 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="font-label text-sm text-on-surface-variant block">{t('intake_summary')}</label>
+            <label htmlFor="intake-summary" className="font-label text-sm text-on-surface-variant block">{t('intake_summary')}</label>
             <textarea
+              id="intake-summary"
               value={data.summary}
               onChange={(e) => setData({ ...data, summary: e.target.value })}
               rows={3}

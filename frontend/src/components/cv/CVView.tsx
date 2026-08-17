@@ -287,11 +287,13 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
             type="file"
             accept=".pdf"
             onChange={e => setUploadFile(e.target.files[0])}
+            aria-label={t('cv_upload_file_label')}
             className="text-sm text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary-container/15 file:text-primary file:text-sm file:font-label"
           />
           <select
             value={uploadVariant}
             onChange={e => setUploadVariant(e.target.value)}
+            aria-label={t('cv_variant_select_label')}
             className="bg-surface-container-lowest border border-outline-variant/10 text-sm text-on-surface font-label rounded-md focus:ring-0 focus:border-primary/50 py-2.5 px-4"
           >
             <option value="general" className="bg-surface-container">{t('cv_variant_general')}</option>

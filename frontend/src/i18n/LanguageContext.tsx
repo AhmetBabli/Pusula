@@ -89,6 +89,7 @@ const translations: Translations = {
   applications_title: { tr: 'Başvuru Takip', en: 'Application Tracking' },
   applications_count_suffix: { tr: 'Başvuru · İş Akışı', en: 'Applications · Workflow' },
   applications_filter_all: { tr: 'Tümü', en: 'All' },
+  applications_filter_label: { tr: 'Duruma göre filtrele', en: 'Filter by status' },
   applications_status_draft: { tr: 'Taslak', en: 'Draft' },
   applications_status_awaiting: { tr: 'Onay Bekliyor', en: 'Awaiting approval' },
   applications_status_approved: { tr: 'Onaylandı', en: 'Approved' },
@@ -162,6 +163,8 @@ const translations: Translations = {
   cv_variant_it: { tr: 'IT & Sistem Yönetimi', en: 'IT & Systems Administration' },
   cv_analyzing: { tr: 'Analiz Yapılıyor...', en: 'Analyzing...' },
   cv_upload_and_analyze: { tr: 'Yükle ve Analiz Et', en: 'Upload and analyze' },
+  cv_upload_file_label: { tr: 'PDF dosyası seç', en: 'Choose PDF file' },
+  cv_variant_select_label: { tr: 'CV türü', en: 'CV type' },
 
   // ── Inbox (Gelen Kutusu) ──
   inbox_title: { tr: 'Gelen Kutusu', en: 'Inbox' },

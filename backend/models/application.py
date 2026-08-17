@@ -21,6 +21,10 @@ class Application(Base):
     # Başvuru verileri (JSON native formatı doğru kullanılmış)
     form_data = Column(JSON, nullable=True)            # Doldurulmuş form alanları
 
+    # Başvuru formlarında sık sorulan sorulara kopyala-yapıştıra hazır,
+    # CV+ilana özel AI cevapları: [{"question": "...", "answer": "..."}]
+    qa_answers = Column(JSON, nullable=True)
+
     # 🚀 Mektup silinirse başvuru kalmaya devam etsin, sadece referansı kopsun (SET NULL)
     cover_letter_id = Column(Integer, ForeignKey("cover_letters.id", ondelete="SET NULL"), nullable=True)
 

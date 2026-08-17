@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
+from backend.config import settings
 from backend.database import get_db
 from backend.models.application import Application, CoverLetter
 from backend.models.job import Job
@@ -26,6 +27,10 @@ class ApprovalRequest(BaseModel):
     notes: Optional[str] = None
     contact_email: Optional[str] = None  # Kullanıcı bulunan e-postayı onaydan önce düzeltebilir
 
+class CustomQARequest(BaseModel):
+    # Kullanıcının, ilanın kendi başvuru formunda gördüğü gerçek sorular
+    questions: List[str] = Field(..., min_length=1, max_length=10)
+
 # GET / listelemesi için alt şemalar
 class JobSummary(BaseModel):
     id: int
@@ -44,12 +49,14 @@ class ApplicationOut(BaseModel):
     job: Optional[JobSummary]
     cv: Optional[CVSummary]
     cover_letter_preview: Optional[str]
+    cover_letter_full: Optional[str] = None
     created_at: Optional[datetime]
     submitted_at: Optional[datetime]
     contact_email: Optional[str] = None
     contact_email_source: Optional[str] = None
     send_status: Optional[str] = None
     send_error: Optional[str] = None
+    qa_answers: Optional[List[dict]] = None
 
 # === Endpoints ===
 
@@ -89,12 +96,14 @@ def list_applications(
             "job": {"id": job.id, "title": job.title, "company": job.company, "source_url": job.source_url} if job else None,
             "cv": {"id": cv.id, "title": cv.title, "file_path": cv.file_path} if cv else None,
             "cover_letter_preview": preview,
+            "cover_letter_full": cover.content if cover else None,
             "created_at": app.created_at,
             "submitted_at": app.submitted_at,
             "contact_email": app.contact_email,
             "contact_email_source": app.contact_email_source,
             "send_status": app.send_status,
             "send_error": app.send_error,
+            "qa_answers": app.qa_answers,
         })
         
     return result
@@ -105,7 +114,12 @@ async def prepare_application(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """İlan için başvuru hazırla: CV seç + motivasyon mektubu üret."""
+    """İlan için başvuru hazırla: CV seç + motivasyon mektubu üret + e-posta ara.
+    Soru-cevap burada ÜRETİLMEZ — sitenin kendi formunda hangi soruların
+    sorulacağını önceden bilemediğimiz için genel-geçer 5 soruyu tahmin edip
+    boşuna bir AI çağrısı harcamak yerine, kullanıcı gerçek soruları görüp
+    getirdiğinde /answer-questions ile anında cevaplıyoruz."""
+    import asyncio
     from backend.ai.gemini_client import generate_cover_letter
 
     job = db.query(Job).filter(Job.id == req.job_id).first()
@@ -128,29 +142,31 @@ async def prepare_application(
     university = current_user.university
     department = current_user.department
 
-    # AI ile Motivasyon Mektubu Üretimi
-    # Not: Bu işlem senkron bekliyor (API'yi bloklar), ancak kullanıcı direkt sonucu
+    # AI çağrılarını paralel çalıştırıyoruz (mektup + e-posta keşfi) — sırayla
+    # çalıştırılsaydı kullanıcı ikisinin toplam süresi kadar beklerdi.
+    # Not: Bu senkron bekliyor (API'yi bloklar), ancak kullanıcı direkt sonucu
     # görüp onaylayacağı için burada BackgroundTasks yerine bekletmek kabul edilebilir.
-    letter_content = await generate_cover_letter(
-        job_title=job.title,
-        company_name=job.company,
-        job_description=job.description or "",
-        cv_text=cv.extracted_text or "",
-        user_name=user_name,
-        university=university,
-        department=department,
+    letter_content, (contact_email, contact_email_source) = await asyncio.gather(
+        generate_cover_letter(
+            job_title=job.title,
+            company_name=job.company,
+            job_description=job.description or "",
+            cv_text=cv.extracted_text or "",
+            user_name=user_name,
+            university=university,
+            department=department,
+            api_key=current_user.gemini_api_key,
+        ),
+        OutreachAgent.find_job_contact_email(job, api_key=current_user.gemini_api_key),
     )
 
     cover_letter = CoverLetter(
         job_id=job.id,
         content=letter_content,
-        ai_model="gemini-2.0-flash",
+        ai_model=settings.GEMINI_MODEL,
     )
     db.add(cover_letter)
     db.flush()
-
-    # İlan için başvuru e-postası keşfi: önce ilanın kendi metni, yoksa web araması
-    contact_email, contact_email_source = OutreachAgent.find_job_contact_email(job)
 
     application = Application(
         user_id=current_user.id,
@@ -211,6 +227,50 @@ def approve_application(
     else:
         return {"message": "Başvuru reddedildi. Düzenleyebilirsiniz.", "status": "draft"}
 
+@router.post("/{app_id}/answer-questions")
+async def answer_custom_questions(
+    app_id: int,
+    req: CustomQARequest,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Kullanıcının ilanın kendi başvuru formunda gördüğü gerçek soruları
+    yanıtlar. Sitenin formunu otomatik okumaya çalışmıyoruz (kırılgan/güvensiz)
+    — kullanıcı soruları kendi gözüyle görüp buraya yapıştırıyor, biz CV+ilana
+    göre anında kopyala-yapıştıra hazır cevap üretiyoruz. Yeni cevaplar mevcut
+    (genel) soru-cevap listesinin üzerine eklenir, üzerine yazmaz."""
+    from backend.ai.gemini_client import generate_application_qa
+
+    app = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Başvuru bulunamadı")
+
+    job = db.query(Job).filter(Job.id == app.job_id).first()
+    cv = db.query(CV).filter(CV.id == app.cv_id).first()
+    if not job or not cv:
+        raise HTTPException(status_code=400, detail="Başvuruya ait ilan veya CV bulunamadı")
+
+    new_answers = await generate_application_qa(
+        job_title=job.title,
+        company_name=job.company,
+        job_description=job.description or "",
+        cv_text=cv.extracted_text or "",
+        user_name=current_user.full_name,
+        university=current_user.university,
+        department=current_user.department,
+        api_key=current_user.gemini_api_key,
+        custom_questions=req.questions,
+    )
+
+    if not new_answers:
+        raise HTTPException(status_code=502, detail="Cevaplar üretilemedi, lütfen tekrar deneyin.")
+
+    app.qa_answers = (app.qa_answers or []) + new_answers
+    db.commit()
+    db.refresh(app)
+
+    return {"qa_answers": app.qa_answers}
+
 @router.post("/{app_id}/submit")
 def submit_application(
     app_id: int,
@@ -248,6 +308,7 @@ def submit_application(
             subject=subject,
             html_body=html_body,
             cv_path=cv.file_path if cv else None,
+            cv_filename=cv.title if cv else None,
         )
 
         if success:

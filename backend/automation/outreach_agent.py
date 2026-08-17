@@ -1,4 +1,5 @@
 import re
+import json
 import base64
 import requests
 import smtplib
@@ -8,7 +9,8 @@ from typing import Optional
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from bs4 import BeautifulSoup
+from google import genai
+from google.genai import types
 from backend.config import settings
 
 # Loglama yapılandırması
@@ -28,14 +30,16 @@ class OutreachAgent:
     EMAIL_REGEX = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
     @classmethod
-    def find_job_contact_email(cls, job) -> tuple[str, str]:
+    async def find_job_contact_email(cls, job, api_key: Optional[str] = None) -> tuple[str, str]:
         """
         Bir ilan için başvuru e-postası bulur. Öncelik sırası:
         1. İlanın kendi metninde (description/requirements) geçen bir e-posta
            (birinci elden veri — en güvenilir kaynak).
-        2. Bulunamazsa şirket adına göre web araması (hunt_email) — tahmine
-           dayalı, daha düşük güven.
-        Döndürür: (email_veya_bos_string, kaynak) — kaynak: "job_posting" | "web_search" | ""
+        2. Bulunamazsa şirketin RESMİ web sitesi üzerinden arama (hunt_email) —
+           tahmine dayalı, daha düşük güven ama iş ilanı sitelerinden değil
+           doğrudan şirketin kendi kariyer/iletişim sayfasından geldiği için
+           eski DuckDuckGo-metin-tarama yöntemine göre çok daha isabetli.
+        Döndürür: (email_veya_bos_string, kaynak) — kaynak: "job_posting" | "company_site" | ""
         """
         text = " ".join(filter(None, [getattr(job, "description", None), getattr(job, "requirements", None)]))
         if text:
@@ -45,66 +49,79 @@ class OutreachAgent:
                 logger.info(f"[{job.company}] İlan metninden e-posta bulundu: {found[0]}")
                 return found[0], "job_posting"
 
-        guessed = cls.hunt_email(job.company)
+        guessed = await cls.hunt_email(job.company, api_key=api_key)
         if guessed:
-            return guessed, "web_search"
+            return guessed, "company_site"
 
         return "", ""
 
     @classmethod
-    def hunt_email(cls, company_name: str) -> str:
+    async def hunt_email(cls, company_name: str, api_key: Optional[str] = None) -> str:
         """
-        Arama motoru üzerinden firmanın insan kaynakları veya iletişim mailini arar.
+        Şirketin resmi web sitesini bulur (Gemini + Google Search grounding),
+        kariyer/İK/iletişim sayfalarına bakar ve orada geçen bir e-posta adresi
+        döndürür. Üçüncü parti iş ilanı sitelerinden değil, doğrudan şirketin
+        kendi alan adından bilgi kullanılır (daha yüksek güven).
         """
-        query = f'"{company_name}" (ik OR "insan kaynakları" OR kariyer OR info OR iletisim OR contact) mail "@"'
-        url = "https://html.duckduckgo.com/html"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        }
-        
+        effective_key = api_key or settings.GEMINI_API_KEY
+        if not effective_key:
+            return ""
+
+        prompt = f"""Google araması kullanarak "{company_name}" şirketinin RESMİ web sitesini bul.
+O sitenin kariyer, insan kaynakları veya iletişim sayfasına bak ve başvuru/İK
+iletişimi için kullanılabilecek bir e-posta adresi ara.
+
+Kurallar:
+- SADECE şirketin kendi resmi alan adından bilgi kullan (LinkedIn, Kariyer.net,
+  Youthall gibi üçüncü parti iş ilanı sitelerinden veya sosyal medyadan DEĞİL).
+- Gerçek bir e-posta bulamazsan veya emin değilsen "email" alanını boş bırak,
+  ASLA uydurma/tahmini bir e-posta üretme.
+
+Yanıtı SADECE şu JSON formatında ver, başka açıklama ekleme:
+{{"email": "...", "source_url": "..."}}"""
+
         try:
-            res = requests.post(url, data={'q': query}, headers=headers, timeout=15)
-            res.raise_for_status() # HTTP hatalarını (404, 500 vb.) yakalamak için
-            
-            soup = BeautifulSoup(res.text, "html.parser")
-            text_content = soup.get_text()
-            
-            emails = cls.EMAIL_REGEX.findall(text_content)
-            
-            # Filtreleme: İstenmeyen uzantıları/domainleri çıkar
-            # (duckduckgo.com dahil — arama motorunun kendi sayfa metninden sızan,
-            # şirketle hiçbir ilgisi olmayan adresleri elemek için)
-            invalid_extensions = ("png", "jpg", "jpeg", "gif", "w3.org", "sentry.io", "duckduckgo.com", "example.com")
-            valid_emails = [e.lower() for e in set(emails) if not e.lower().endswith(invalid_extensions)]
-            
-            if not valid_emails:
-                logger.info(f"[{company_name}] için geçerli bir e-posta adresi bulunamadı.")
+            client = genai.Client(api_key=effective_key)
+            config = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
+            response = await client.aio.models.generate_content(
+                model=settings.GEMINI_MODEL, contents=prompt, config=config
+            )
+            text = (response.text or "").strip()
+
+            match = re.search(r'\{.*\}', text, re.DOTALL)
+            if not match:
+                logger.info(f"[{company_name}] Gemini yanıtında JSON bulunamadı.")
                 return ""
-                
-            # Öncelikli IK ve Kariyer maillerini kontrol et
-            priority_keywords = ["ik@", "kariyer@", "hr@", "insankaynaklari@", "recruitment@"]
-            for email in valid_emails:
-                if any(keyword in email for keyword in priority_keywords):
-                    logger.info(f"[{company_name}] Öncelikli hedef bulundu: {email}")
-                    return email
-                    
-            # Fallback: Info ve İletişim
-            for email in valid_emails:
-                if "info@" in email or "iletisim@" in email:
-                    logger.info(f"[{company_name}] İkincil hedef bulundu: {email}")
-                    return email
-            
-            # Kriterlere uymayan ama geçerli ilk adresi döndür
-            logger.info(f"[{company_name}] Genel e-posta bulundu: {valid_emails[0]}")
-            return valid_emails[0]
-            
-        except requests.RequestException as e:
-            logger.error(f"[{company_name}] Ağ veya istek hatası: {e}")
+
+            data = json.loads(match.group())
+            email = (data.get("email") or "").strip().lower()
+            invalid_extensions = ("png", "jpg", "jpeg", "gif", "w3.org", "sentry.io", "example.com", "google.com")
+            if email and cls.EMAIL_REGEX.fullmatch(email) and not email.endswith(invalid_extensions):
+                logger.info(f"[{company_name}] Şirket sitesinden e-posta bulundu: {email} (kaynak: {data.get('source_url')})")
+                return email
+
+            logger.info(f"[{company_name}] Şirket sitesinde geçerli bir e-posta bulunamadı.")
             return ""
         except Exception as e:
-            logger.critical(f"[{company_name}] Beklenmeyen hata (hunt_email): {e}")
+            logger.error(f"[{company_name}] Beklenmeyen hata (hunt_email): {e}")
             return ""
+
+    @staticmethod
+    def _safe_attachment_filename(cv_path: str, preferred_name: Optional[str] = None) -> str:
+        """Eke gidecek dosya adını belirler: mümkünse CV'nin (kullanıcıya anlamlı)
+        başlığını kullanır, diskteki rastgele/zaman damgalı depolama adını değil.
+        Dosya sisteminde/e-posta istemcilerinde sorun çıkarabilecek karakterleri temizler."""
+        ext = os.path.splitext(cv_path)[1] or ".pdf"
+        name = (preferred_name or "").strip()
+        if not name:
+            return os.path.basename(cv_path)
+
+        name = re.sub(r'[\\/*?:"<>|]', "", name).strip()
+        if not name:
+            return os.path.basename(cv_path)
+        if not os.path.splitext(name)[1]:
+            name += ext
+        return name
 
     @staticmethod
     def _build_mime_message(
@@ -113,6 +130,7 @@ class OutreachAgent:
         subject: str,
         html_body: str,
         cv_path: Optional[str] = None,
+        cv_filename: Optional[str] = None,
     ) -> Optional[MIMEMultipart]:
         """Ortak MIME mesaj inşası (SMTP ve Gmail API gönderim yolları bunu paylaşır)."""
         msg = MIMEMultipart()
@@ -126,9 +144,10 @@ class OutreachAgent:
         if cv_path:
             if os.path.exists(cv_path) and os.path.isfile(cv_path):
                 try:
+                    attachment_name = OutreachAgent._safe_attachment_filename(cv_path, cv_filename)
                     with open(cv_path, "rb") as f:
-                        part = MIMEApplication(f.read(), Name=os.path.basename(cv_path))
-                    part['Content-Disposition'] = f'attachment; filename="{os.path.basename(cv_path)}"'
+                        part = MIMEApplication(f.read(), Name=attachment_name)
+                    part['Content-Disposition'] = f'attachment; filename="{attachment_name}"'
                     msg.attach(part)
                 except IOError as e:
                     logger.error(f"CV dosyası okunamadı: {e}")
@@ -149,7 +168,8 @@ class OutreachAgent:
         html_body: str,
         cv_path: Optional[str] = None,
         smtp_host: str = 'smtp.gmail.com',
-        smtp_port: int = 587
+        smtp_port: int = 587,
+        cv_filename: Optional[str] = None,
     ) -> bool:
         """
         SMTP + uygulama şifresi kullanarak hedef maile içeriği ve varsa CV'yi gönderir.
@@ -158,7 +178,7 @@ class OutreachAgent:
             logger.error("Hedef e-posta adresi boş olamaz.")
             return False
 
-        msg = cls._build_mime_message(sender_email, target_email, subject, html_body, cv_path)
+        msg = cls._build_mime_message(sender_email, target_email, subject, html_body, cv_path, cv_filename)
         if msg is None:
             return False
 
@@ -215,13 +235,14 @@ class OutreachAgent:
         subject: str,
         html_body: str,
         cv_path: Optional[str] = None,
+        cv_filename: Optional[str] = None,
     ) -> bool:
         """Google OAuth (gmail.send izni) ile, uygulama şifresi olmadan doğrudan Gmail API üzerinden gönderir."""
         if not target_email:
             logger.error("Hedef e-posta adresi boş olamaz.")
             return False
 
-        msg = cls._build_mime_message(sender_email, target_email, subject, html_body, cv_path)
+        msg = cls._build_mime_message(sender_email, target_email, subject, html_body, cv_path, cv_filename)
         if msg is None:
             return False
 
@@ -250,6 +271,7 @@ class OutreachAgent:
         subject: str,
         html_body: str,
         cv_path: Optional[str] = None,
+        cv_filename: Optional[str] = None,
     ) -> bool:
         """EmailAccount'un bağlantı yöntemine göre (OAuth veya uygulama şifresi) gönderim yapar."""
         if getattr(account, "auth_method", "app_password") == "oauth":
@@ -257,7 +279,7 @@ class OutreachAgent:
             if not access_token:
                 logger.error("Google erişim token'ı alınamadı, gönderim iptal edildi.")
                 return False
-            return cls.send_via_gmail_api(access_token, account.email, target_email, subject, html_body, cv_path)
+            return cls.send_via_gmail_api(access_token, account.email, target_email, subject, html_body, cv_path, cv_filename)
 
         return cls.send_cold_email(
             sender_email=account.email,
@@ -266,4 +288,5 @@ class OutreachAgent:
             subject=subject,
             html_body=html_body,
             cv_path=cv_path,
+            cv_filename=cv_filename,
         )

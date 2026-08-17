@@ -12,6 +12,13 @@ class JobMatchOut(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
+class CVVariantPerformanceOut(BaseModel):
+    variant_type: str
+    cv_count: int
+    application_count: int
+    matched_job_count: int
+    avg_match_score: float
+
 class DashboardStatsOut(BaseModel):
     total_jobs: int
     new_jobs: int
@@ -20,5 +27,6 @@ class DashboardStatsOut(BaseModel):
     pending_approvals: int
     total_cvs: int
     top_matches: List[JobMatchOut]
+    cv_variant_performance: List[CVVariantPerformanceOut] = []
 
     model_config = ConfigDict(from_attributes=True)

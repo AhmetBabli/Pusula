@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Plus, Trash2, Star, CheckCircle, AlertTriangle } from 'lucide-react';
+import { FileText, Plus, Trash2, Star, CheckCircle, AlertTriangle, TrendingUp } from 'lucide-react';
 import CyberModal from '../ui/CyberModal';
 import * as api from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
+
+const VARIANT_LABEL_KEYS = {
+  general: 'cv_variant_general',
+  ai: 'cv_variant_ai',
+  cyber: 'cv_variant_cyber',
+  it: 'cv_variant_it',
+};
 
 function ScoreRing({ score, analyzed, pendingLabel }) {
   const pct = Math.round(score || 0);
@@ -24,7 +31,46 @@ function ScoreRing({ score, analyzed, pendingLabel }) {
   );
 }
 
-function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
+function VariantPerformancePanel({ data, t }) {
+  if (!data || data.length === 0) return null;
+  const maxScore = Math.max(1, ...data.map((d) => d.avg_match_score || 0));
+
+  return (
+    <div className="bg-surface-container border border-outline-variant/10 rounded-xl p-5 md:p-6 flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <TrendingUp className="w-4 h-4 text-primary" />
+        <h3 className="text-sm font-label font-semibold text-on-surface">{t('cv_performance_title')}</h3>
+      </div>
+      <div className="flex flex-col gap-3">
+        {data.map((row) => {
+          const label = VARIANT_LABEL_KEYS[row.variant_type] ? t(VARIANT_LABEL_KEYS[row.variant_type]) : row.variant_type;
+          const hasScore = row.matched_job_count > 0;
+          return (
+            <div key={row.variant_type} className="flex items-center gap-3">
+              <span className="text-sm font-label text-on-surface w-32 shrink-0 truncate">{label}</span>
+              <div className="flex-1 h-2 rounded-full bg-surface-container-highest overflow-hidden">
+                {hasScore && (
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{ width: `${Math.max(4, (row.avg_match_score / maxScore) * 100)}%` }}
+                  />
+                )}
+              </div>
+              <span className="text-xs font-body tabular-nums text-on-surface-variant w-14 shrink-0 text-right">
+                {hasScore ? `${Math.round(row.avg_match_score)}%` : '—'}
+              </span>
+              <span className="text-xs font-body text-on-surface-variant w-28 shrink-0 text-right">
+                {t('cv_performance_applications').replace('{count}', row.application_count)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault, variantPerformance }) {
   const { t } = useLanguage();
   const [selectedCV, setSelectedCV] = useState(null);
   const [showUpload, setShowUpload] = useState(false);
@@ -87,6 +133,8 @@ function CVView({ cvs, isLoading, onUpload, onDelete, onSetDefault }) {
           <Plus className="w-4 h-4" /> {t('cv_new_button')}
         </button>
       </motion.div>
+
+      <VariantPerformancePanel data={variantPerformance} t={t} />
 
       {/* List section */}
       <div className="w-full">

@@ -404,6 +404,7 @@ const App: React.FC = () => {
         onUpload={handleCvUpload}
         onDelete={handleCvDelete}
         onSetDefault={handleCvSetDefault}
+        variantPerformance={dashboardStats?.cv_variant_performance || []}
       />
     ),
     inbox: <InboxView items={inboxItems} isLoading={inboxLoading} onSync={handleSyncInbox} />,

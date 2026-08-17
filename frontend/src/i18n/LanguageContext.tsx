@@ -159,6 +159,8 @@ const translations: Translations = {
   cv_empty_desc: { tr: 'Kariyer fırsatlarını değerlendirmek için bir CV yükleyin. Yapay zeka analizi anında başlayacaktır.', en: 'Upload a CV to start evaluating career opportunities. AI analysis will begin instantly.' },
   cv_default_badge: { tr: 'Varsayılan', en: 'Default' },
   cv_others_title: { tr: 'Diğer CV\'ler', en: 'Other CVs' },
+  cv_performance_title: { tr: 'CV Türüne Göre Performans', en: 'Performance by CV Type' },
+  cv_performance_applications: { tr: '{count} başvuru', en: '{count} applications' },
   cv_ai_generated_badge: { tr: 'Yapay Zeka ile Oluşturuldu', en: 'AI Generated' },
   cv_pdf: { tr: 'PDF', en: 'PDF' },
   cv_text: { tr: 'Metin', en: 'Text' },

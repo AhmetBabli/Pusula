@@ -8,7 +8,7 @@ from backend.models.event import Event
 from backend.models.application import Application
 from backend.models.cv import CV
 from backend.models.user import UserProfile
-from backend.schemas.responses import DashboardStatsOut, JobMatchOut
+from backend.schemas.responses import DashboardStatsOut, JobMatchOut, CVVariantPerformanceOut
 from backend.auth import get_current_user
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -61,6 +61,45 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: UserProfile
         for job, state in top_match_rows
     ]
 
+    # 5. CV varyant performansı: her varyant tipi için kaç CV var, kaç başvuruda
+    # kullanılmış ve (bu kullanıcının JobUserState'lerinde best_cv_id o varyanttan
+    # bir CV'ye işaret ediyorsa) ortalama eşleşme skoru ne. (1) numaralı borç
+    # düzeltmesiyle match_score artık kullanıcıya özel olduğu için mümkün oldu.
+    cv_counts = dict(
+        db.query(CV.variant_type, func.count(CV.id))
+        .filter(CV.user_id == current_user.id)
+        .group_by(CV.variant_type)
+        .all()
+    )
+
+    app_counts = dict(
+        db.query(CV.variant_type, func.count(Application.id))
+        .join(Application, Application.cv_id == CV.id)
+        .filter(CV.user_id == current_user.id, Application.user_id == current_user.id)
+        .group_by(CV.variant_type)
+        .all()
+    )
+
+    match_rows = (
+        db.query(CV.variant_type, func.avg(JobUserState.match_score), func.count(JobUserState.id))
+        .join(JobUserState, JobUserState.best_cv_id == CV.id)
+        .filter(CV.user_id == current_user.id, JobUserState.user_id == current_user.id)
+        .group_by(CV.variant_type)
+        .all()
+    )
+    match_map = {variant: (avg_score, matched_count) for variant, avg_score, matched_count in match_rows}
+
+    cv_variant_performance = [
+        CVVariantPerformanceOut(
+            variant_type=variant,
+            cv_count=cv_count,
+            application_count=app_counts.get(variant, 0),
+            matched_job_count=match_map.get(variant, (0, 0))[1],
+            avg_match_score=round(match_map.get(variant, (0, 0))[0] or 0, 1),
+        )
+        for variant, cv_count in cv_counts.items()
+    ]
+
     return DashboardStatsOut(
         total_jobs=total_jobs,
         new_jobs=new_jobs,
@@ -69,4 +108,5 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: UserProfile
         pending_approvals=pending_approvals,
         total_cvs=total_cvs,
         top_matches=top_matches,
+        cv_variant_performance=cv_variant_performance,
     )

@@ -22,9 +22,6 @@ function Navigation({ activeIndex, onChange, isAuthenticated }) {
 
   return (
     <nav aria-label="Ana Menü" className="w-60 flex flex-col gap-1 p-3 h-full bg-surface-container/50 border-r border-outline-variant/10 backdrop-blur-xl">
-      <div className="text-[11px] font-label text-on-surface-variant/60 tracking-[0.15em] uppercase mb-3 px-3 mt-1">
-        {t('nav_menu_label')}
-      </div>
       {visibleSections.map((sec) => {
         const Icon = sec.icon;
         const isActive = activeIndex === sec.id;
@@ -32,6 +29,7 @@ function Navigation({ activeIndex, onChange, isAuthenticated }) {
         return (
           <button
             key={sec.id}
+            id={`nav-tab-${sec.id}`}
             type="button"
             className={`relative flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-150 w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-primary ${isActive ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-outline-variant/5'}`}
             onClick={() => onChange(sec.id)}

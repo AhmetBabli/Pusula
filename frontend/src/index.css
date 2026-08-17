@@ -4,49 +4,51 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* ── Kurumsal Tema Token'ları (RGB üçlü — Tailwind rgb(var(--x) / <alpha-value>) deseni) ── */
+/* ── Pusula Tema Token'ları (RGB üçlü — Tailwind rgb(var(--x) / <alpha-value>) deseni) ──
+   Açık tema varsayılan: soğuk-nötr neredeyse-beyaz zemin, tek vurgu rengi olarak
+   doygunluğu kısılmış çivit/indigo mavisi (#3B3F8C) — "pusula iğnesi" teması. */
 :root {
-  --color-surface: 250 250 250;
-  --color-surface-dim: 228 228 231;
+  --color-surface: 246 247 251;
+  --color-surface-dim: 228 230 240;
   --color-surface-bright: 255 255 255;
-  --color-surface-variant: 228 228 231;
-  --color-surface-container-lowest: 244 244 245;
+  --color-surface-variant: 228 230 240;
+  --color-surface-container-lowest: 251 251 254;
   --color-surface-container: 255 255 255;
-  --color-surface-container-high: 244 244 245;
-  --color-surface-container-highest: 228 228 231;
-  --color-background: 250 250 250;
-  --color-on-surface: 24 24 27;
-  --color-on-surface-variant: 113 113 122;
-  --color-on-background: 24 24 27;
-  --color-primary: 37 99 235;
-  --color-primary-container: 37 99 235;
+  --color-surface-container-high: 236 237 245;
+  --color-surface-container-highest: 228 230 240;
+  --color-background: 246 247 251;
+  --color-on-surface: 20 21 31;
+  --color-on-surface-variant: 91 96 114;
+  --color-on-background: 20 21 31;
+  --color-primary: 59 63 140;
+  --color-primary-container: 59 63 140;
   --color-on-primary: 255 255 255;
-  --color-secondary: 82 82 91;
-  --color-outline: 24 24 27;
-  --color-outline-variant: 24 24 27;
-  --color-error: 220 38 38;
+  --color-secondary: 91 96 114;
+  --color-outline: 20 21 31;
+  --color-outline-variant: 20 21 31;
+  --color-error: 178 59 59;
 }
 
 :root[data-theme="dark"] {
-  --color-surface: 9 9 11;
-  --color-surface-dim: 0 0 0;
-  --color-surface-bright: 39 39 42;
-  --color-surface-variant: 39 39 42;
-  --color-surface-container-lowest: 0 0 0;
-  --color-surface-container: 24 24 27;
-  --color-surface-container-high: 39 39 42;
-  --color-surface-container-highest: 63 63 70;
-  --color-background: 9 9 11;
-  --color-on-surface: 250 250 250;
-  --color-on-surface-variant: 161 161 170;
-  --color-on-background: 250 250 250;
-  --color-primary: 96 165 250;
-  --color-primary-container: 59 130 246;
-  --color-on-primary: 255 255 255;
-  --color-secondary: 161 161 170;
-  --color-outline: 255 255 255;
-  --color-outline-variant: 255 255 255;
-  --color-error: 248 113 113;
+  --color-surface: 15 16 22;
+  --color-surface-dim: 8 8 12;
+  --color-surface-bright: 29 31 43;
+  --color-surface-variant: 42 44 59;
+  --color-surface-container-lowest: 10 11 16;
+  --color-surface-container: 23 24 33;
+  --color-surface-container-high: 29 31 43;
+  --color-surface-container-highest: 42 44 59;
+  --color-background: 15 16 22;
+  --color-on-surface: 237 238 245;
+  --color-on-surface-variant: 146 150 168;
+  --color-on-background: 237 238 245;
+  --color-primary: 138 143 224;
+  --color-primary-container: 122 127 217;
+  --color-on-primary: 15 16 22;
+  --color-secondary: 146 150 168;
+  --color-outline: 237 238 245;
+  --color-outline-variant: 237 238 245;
+  --color-error: 217 115 107;
 }
 
 body {
@@ -57,114 +59,23 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* ── Intelligence Dashboard Revamp ── */
-
-/* Border Destruction & Glassmorphism Glow */
-.glass-panel {
-  background: rgba(13, 18, 29, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-  border-radius: 12px;
-  position: relative;
-  overflow: hidden;
+/* ── Pusula Rehber Tur Maskotu ── */
+@keyframes pusula-mascot-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(-1.5deg); }
+}
+@keyframes pusula-mascot-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.12); }
+}
+.pusula-mascot-body { animation: pusula-mascot-bob 3.2s ease-in-out infinite; }
+.pusula-mascot-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pusula-mascot-blink 4.5s ease-in-out infinite;
+}
+.pusula-mascot-needle,
+.pusula-mascot-pupils {
+  transition: transform 0.6s cubic-bezier(.34, 1.56, .64, 1);
 }
 
-.glass-panel::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
-  opacity: 0.5;
-}
-
-/* Holographic Philosopher Strip Styles */
-.philosopher-strip {
-  position: relative;
-  width: 100%;
-  padding: 1.5rem 2rem;
-  background: linear-gradient(to right, rgba(13, 18, 29, 0.9), rgba(15, 23, 42, 0.8));
-  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.philosopher-glow-line {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  width: 100%;
-  background: linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, transparent);
-  animation: hologramGlow 4s linear infinite;
-  opacity: 0.7;
-}
-
-@keyframes hologramGlow {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.philosopher-content {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  transition: opacity 0.6s ease, transform 0.6s ease;
-}
-
-.philosopher-content.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.philosopher-content.fading {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.philosopher-icon {
-  font-size: 1.5rem;
-}
-
-.philosopher-quote {
-  font-size: 1.125rem;
-  font-style: italic;
-  font-weight: 300;
-  color: #e2e8f0;
-  letter-spacing: 0.02em;
-}
-
-.philosopher-author {
-  font-size: 0.875rem;
-  color: #94a3b8;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.philosopher-dots {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.philosopher-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.philosopher-dot.active {
-  background: #3b82f6;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
-  transform: scale(1.2);
-}

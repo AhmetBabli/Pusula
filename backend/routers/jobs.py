@@ -2,14 +2,16 @@ import uuid
 import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from backend.database import get_db, SessionLocal
 from backend.models.job import Job
+from backend.models.job_user_state import JobUserState
 from backend.models.cv import CV
 from backend.models.user import UserProfile
-from backend.utils.db_helpers import get_or_404
+from backend.utils.db_helpers import get_or_404, get_or_create_job_state
 from backend.ai.gemini_client import match_job_to_cv, match_jobs_batch
 from backend.schemas.agent_contracts import ScrapedJobContract
 from backend.routers.tasks import update_task
@@ -30,17 +32,30 @@ def list_jobs(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """İlanları listele (filtreleme ile). İlanlar tüm kullanıcılar arasında paylaşılan bir katalogdur."""
-    q = db.query(Job).order_by(Job.match_score.desc())
+    """İlanları listele (filtreleme ile). İlanlar tüm kullanıcılar arasında
+    paylaşılan bir katalogdur; durum/favori/skor ise bu kullanıcıya özel
+    (JobUserState) — LEFT JOIN ile, hiç etkileşilmemiş ilanlar varsayılan
+    değerlerle (status="new", match_score=0) döner."""
+    state_status = func.coalesce(JobUserState.status, "new")
+    state_score = func.coalesce(JobUserState.match_score, 0)
+
+    q = (
+        db.query(Job, JobUserState)
+        .outerjoin(
+            JobUserState,
+            (JobUserState.job_id == Job.id) & (JobUserState.user_id == current_user.id),
+        )
+    )
 
     if source:
         q = q.filter(Job.source == source)
     if status:
-        q = q.filter(Job.status == status)
+        q = q.filter(state_status == status)
     if min_score is not None:
-        q = q.filter(Job.match_score >= min_score)
+        q = q.filter(state_score >= min_score)
 
-    jobs = q.limit(100).all()
+    rows = q.order_by(state_score.desc()).limit(100).all()
+
     return [
         {
             "id": j.id,
@@ -48,20 +63,23 @@ def list_jobs(
             "company": j.company,
             "location": j.location,
             "source": j.source,
-            "match_score": j.match_score,
-            "status": j.status,
+            "match_score": state.match_score if state else 0,
+            "status": state.status if state else "new",
             "job_type": j.job_type,
             "deadline": j.deadline.isoformat() if j.deadline else None,
             "source_url": j.source_url,
-            "is_favorite": j.is_favorite,
+            "is_favorite": state.is_favorite if state else False,
         }
-        for j in jobs
+        for j, state in rows
     ]
 
 @router.get("/{job_id}")
 def get_job(job_id: int, db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
     """İlan detayı."""
     job = get_or_404(db, Job, job_id, "İlan")
+    state = db.query(JobUserState).filter(
+        JobUserState.user_id == current_user.id, JobUserState.job_id == job_id
+    ).first()
     return {
         "id": job.id,
         "title": job.title,
@@ -71,12 +89,12 @@ def get_job(job_id: int, db: Session = Depends(get_db), current_user: UserProfil
         "source_url": job.source_url,
         "description": job.description,
         "requirements": job.requirements,
-        "match_score": job.match_score,
-        "match_explanation": job.match_explanation,
-        "best_cv_id": job.best_cv_id,
-        "missing_skills": job.missing_skills,
-        "status": job.status,
-        "is_favorite": job.is_favorite,
+        "match_score": state.match_score if state else 0,
+        "match_explanation": state.match_explanation if state else None,
+        "best_cv_id": state.best_cv_id if state else None,
+        "missing_skills": state.missing_skills if state else [],
+        "status": state.status if state else "new",
+        "is_favorite": state.is_favorite if state else False,
         "deadline": job.deadline.isoformat() if job.deadline else None,
         "posted_at": job.posted_at.isoformat() if job.posted_at else None,
     }
@@ -88,19 +106,21 @@ def update_job_status(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """İlan durumunu JSON body üzerinden güncelle."""
-    job = get_or_404(db, Job, job_id, "İlan")
-    job.status = payload.status
+    """İlan durumunu JSON body üzerinden günceller — sadece bu kullanıcı için."""
+    get_or_404(db, Job, job_id, "İlan")
+    state = get_or_create_job_state(db, current_user.id, job_id)
+    state.status = payload.status
     db.commit()
     return {"message": f"İlan durumu '{payload.status}' olarak güncellendi"}
 
 @router.patch("/{job_id}/favorite")
 def toggle_favorite(job_id: int, db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
-    """Favorilere ekle/çıkar."""
-    job = get_or_404(db, Job, job_id, "İlan")
-    job.is_favorite = not job.is_favorite
+    """Favorilere ekle/çıkar — sadece bu kullanıcı için."""
+    get_or_404(db, Job, job_id, "İlan")
+    state = get_or_create_job_state(db, current_user.id, job_id)
+    state.is_favorite = not state.is_favorite
     db.commit()
-    return {"is_favorite": job.is_favorite}
+    return {"is_favorite": state.is_favorite}
 
 @router.post("/{job_id}/match")
 async def match_job(
@@ -109,7 +129,7 @@ async def match_job(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """İlanı CV ile eşleştir ve skor hesapla."""
+    """İlanı CV ile eşleştir ve skor hesapla — sadece bu kullanıcı için."""
     job = get_or_404(db, Job, job_id, "İlan")
 
     cv_query = db.query(CV).filter(CV.user_id == current_user.id)
@@ -123,11 +143,12 @@ async def match_job(
 
     result = await match_job_to_cv(job.description or "", cv.extracted_text, current_user.skills or [], api_key=current_user.gemini_api_key)
 
-    job.match_score = result.get("score", 0)
-    job.match_explanation = result.get("explanation", "")
-    job.missing_skills = result.get("missing_skills", [])
-    job.best_cv_id = cv.id
-    job.status = "reviewed"
+    state = get_or_create_job_state(db, current_user.id, job_id)
+    state.match_score = result.get("score", 0)
+    state.match_explanation = result.get("explanation", "")
+    state.missing_skills = result.get("missing_skills", [])
+    state.best_cv_id = cv.id
+    state.status = "reviewed"
     db.commit()
 
     return {"job_id": job.id, "match": result}
@@ -169,7 +190,11 @@ MATCH_BATCH_SIZE = 8
 
 # ─── ARKA PLAN GÖREVİ (Kendi DB Session'ını Kendi Yönetir) ───
 async def run_job_sync():
-    """Arka plan görevi: Çoklu Platform Scrape + Toplu (batch) AI Match."""
+    """Arka plan görevi: Çoklu Platform Scrape + (her kullanıcı için ayrı ayrı)
+    Toplu (batch) AI Match. Job satırı paylaşılan bir katalog, ama eşleştirme
+    kullanıcıya özel (JobUserState) — bu yüzden burada TEK bir "global"
+    CV yerine, CV'si olan HER kullanıcı için ayrı bir eşleştirme turu
+    çalıştırılır."""
     import random
     from backend.scrapers.youthall_scraper import YouthallScraper
     from backend.scrapers.kariyer_net_scraper import KariyerNetScraper
@@ -182,9 +207,9 @@ async def run_job_sync():
     # API'den bağımsız olduğu için kendi SessionLocal'ımızı açıyoruz!
     with SessionLocal() as db:
         user = db.query(UserProfile).first()
-        skills = user.skills if user and user.skills else []
 
-        # Dinamik arama terimi belirleme
+        # Dinamik arama terimi belirleme (herhangi bir kullanıcının hedef
+        # sektöründen — tarama tüm kullanıcılar için ortak bir katalog besliyor)
         target_sectors = user.target_sectors if user and user.target_sectors else ["Yazılım", "IT", "Teknoloji"]
         search_keyword = random.choice(target_sectors)
         query = f"{search_keyword}"
@@ -208,25 +233,8 @@ async def run_job_sync():
             except Exception as e:
                 logger.error(f"[-] Scraper error ({s.__class__.__name__}): {e}")
 
-        # Not: match_score paylaşılan Job satırında tutulduğu için (bilinçli,
-        # kabul edilmiş bir sınır — ilanlar tüm kullanıcılar arasında ortak
-        # katalog), aynı anda yalnızca TEK bir kullanıcının CV'sine göre
-        # puanlanabiliyor. En azından "hangi CV" sorusu rastgele/en eski ID
-        # kazanacak şekilde değil, en SON varsayılan yapılan CV kazanacak
-        # şekilde belirleniyor (önceden ORDER BY yoktu, sabit test/seed
-        # hesabının eski CV'si gerçek kullanıcının güncel CV'sinin önüne geçiyordu).
-        default_cv = db.query(CV).filter(CV.is_default == True).order_by(CV.updated_at.desc()).first()
-        default_cv_owner = (
-            db.query(UserProfile).filter(UserProfile.id == default_cv.user_id).first()
-            if default_cv else None
-        )
-        match_api_key = default_cv_owner.gemini_api_key if default_cv_owner else None
-
         added_count = 0
         skipped_count = 0
-        # Eşleştirme bekleyen (Job nesnesi, ilan metni) çiftleri — hepsi toplanıp
-        # sona doğru MATCH_BATCH_SIZE'lık gruplar halinde tek istekte gönderilecek.
-        pending_match: list[tuple[Job, str]] = []
 
         for raw_job_data in new_jobs_data:
             # ── 1. Şema doğrulaması: Kontrat geçmezse bu ilanı atla ──
@@ -241,64 +249,74 @@ async def run_job_sync():
             # ── 2. Duplicate kontrolü ──
             existing = db.query(Job).filter(Job.source_url == job_dict["source_url"]).first()
             if existing:
-                # İlan zaten var ama daha önce hiç puanlanmamış (o an default CV
-                # yoktu) ya da farklı/eski bir CV'ye göre puanlanmış — mevcut
-                # default CV ile yeniden puanlanmak üzere kuyruğa al. "Bir kere
-                # puanla, sonsuza kadar unut" davranışı, kullanıcı CV yüklemeden
-                # önce taranan ilanların kalıcı olarak %0 görünmesine yol açıyordu.
-                if default_cv and default_cv.extracted_text and existing.best_cv_id != default_cv.id:
-                    desc = " ".join(
-                        part for part in [existing.description, existing.requirements, existing.title] if part
-                    )
-                    pending_match.append((existing, desc))
-                    if existing.status == "new":
-                        existing.status = "reviewed"
                 continue
 
             # ── 3. Job oluştur ──
             new_job = Job(**job_dict)
             db.add(new_job)
-            db.flush()  # Sadece ID almak için
             added_count += 1
 
-            # ── 4. AI Match kuyruğuna ekle (CV varsa) ──
-            if default_cv and default_cv.extracted_text:
-                desc = " ".join(
-                    part for part in [new_job.description, new_job.requirements, new_job.title] if part
-                )
-                pending_match.append((new_job, desc))
-                new_job.status = "reviewed"
+        db.flush()
 
-        # ── 5. Toplu (batch) AI eşleştirme: her ilan ayrı istek yerine
-        # MATCH_BATCH_SIZE'lık gruplar halinde tek istekte gidiyor ──
-        matched_count = 0
-        if default_cv and default_cv.extracted_text and pending_match:
+        # ── 4. Her kullanıcı için ayrı ayrı toplu (batch) AI eşleştirme ──
+        # CV'si olan her kullanıcı, henüz KENDİ güncel varsayılan CV'sine göre
+        # eşleşmemiş (hiç JobUserState'i olmayan veya eski bir CV'ye göre
+        # puanlanmış) tüm ilanlar için MATCH_BATCH_SIZE'lık gruplar halinde
+        # eşleştirilir — böylece bir kullanıcı CV'sini sisteme yeni yüklese
+        # bile, ondan önce taranmış ilanlar da kalıcı olarak %0 görünmüyor.
+        users_with_cv = (
+            db.query(UserProfile, CV)
+            .join(CV, (CV.user_id == UserProfile.id) & (CV.is_default == True))
+            .filter(CV.extracted_text.isnot(None))
+            .all()
+        )
+
+        total_matched = 0
+        for match_user, default_cv in users_with_cv:
+            skills = match_user.skills or []
+            match_api_key = match_user.gemini_api_key
+
+            existing_state_job_ids = {
+                s.job_id
+                for s in db.query(JobUserState.job_id).filter(
+                    JobUserState.user_id == match_user.id, JobUserState.best_cv_id == default_cv.id
+                ).all()
+            }
+            pending_jobs = db.query(Job).filter(~Job.id.in_(existing_state_job_ids)).all() if existing_state_job_ids else db.query(Job).all()
+            pending_match = [
+                (job, " ".join(part for part in [job.description, job.requirements, job.title] if part))
+                for job in pending_jobs
+            ]
+            if not pending_match:
+                continue
+
             for i in range(0, len(pending_match), MATCH_BATCH_SIZE):
                 chunk = pending_match[i:i + MATCH_BATCH_SIZE]
                 jobs_payload = [{"id": job.id, "description": desc} for job, desc in chunk]
                 try:
                     batch_results = await match_jobs_batch(jobs_payload, default_cv.extracted_text, skills, api_key=match_api_key)
                 except Exception as e:
-                    logger.error(f"[-] Batch match hatası (grup {i // MATCH_BATCH_SIZE}): {e}")
+                    logger.error(f"[-] Batch match hatası (kullanıcı {match_user.id}, grup {i // MATCH_BATCH_SIZE}): {e}")
                     batch_results = {}
 
                 for job, _desc in chunk:
                     result = batch_results.get(job.id)
                     if not result:
-                        # Model bu ilanı atladıysa mevcut değerler korunur —
-                        # best_cv_id güncellenmediği için bir sonraki sync'te
-                        # tekrar denenir.
+                        # Model bu ilanı atladıysa bir sonraki sync'te tekrar denenir.
                         continue
-                    job.match_score = result.get("score", 0)
-                    job.match_explanation = result.get("explanation", "")
-                    job.missing_skills = result.get("missing_skills", [])
+                    state = get_or_create_job_state(db, match_user.id, job.id)
+                    state.match_score = result.get("score", 0)
+                    state.match_explanation = result.get("explanation", "")
+                    state.missing_skills = result.get("missing_skills", [])
                     if result.get("ai_powered"):
-                        job.best_cv_id = default_cv.id
-                        matched_count += 1
+                        state.best_cv_id = default_cv.id
+                        if state.status == "new":
+                            state.status = "reviewed"
+                        total_matched += 1
 
         db.commit()
         logger.info(
             f"[OK] Sync complete. Added: {added_count}, Skipped (schema): {skipped_count}, "
-            f"Matched (AI, batch): {matched_count}/{len(pending_match)}, Query: '{query}'."
+            f"Matched (AI, batch, {len(users_with_cv)} kullanıcı): {total_matched}, Query: '{query}'."
         )
 

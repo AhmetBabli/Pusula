@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime
 from backend.database import Base
 
 class Job(Base):
@@ -32,21 +32,13 @@ class Job(Base):
     # 🚀 Zaman fonksiyonları güncellendi
     scraped_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    # AI Analizi
-    match_score = Column(Float, default=0.0)           # 0-100
-    match_explanation = Column(Text, nullable=True)    # Neden bu skor?
-    best_cv_id = Column(Integer, nullable=True)        # En uygun CV
-    
-    # 🚀 Modern Yöntem: Text yerine SQLAlchemy native JSON tipi kullanıldı.
-    missing_skills = Column(JSON, default=list)        # Eksik beceriler (Python listesi olarak döner)
-
-    # Durum
-    status = Column(String(30), default="new")
-    # new → reviewed → applying → applied → interview → offer → rejected
-
-    is_favorite = Column(Boolean, default=False)
     notes = Column(Text, nullable=True)                # Kullanıcı notları
 
     # 🚀 Zaman fonksiyonları güncellendi
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # NOT: match_score/match_explanation/best_cv_id/missing_skills/status/
+    # is_favorite artık burada DEĞİL — Job tüm kullanıcılar arasında paylaşılan
+    # ortak bir katalog satırı, bu alanlar kullanıcıya özel olduğu için
+    # JobUserState'e taşındı (bkz. backend/models/job_user_state.py).

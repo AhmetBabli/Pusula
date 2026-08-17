@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from backend.database import SessionLocal, init_db
 from backend.models.user import UserProfile
 from backend.models.job import Job
+from backend.models.job_user_state import JobUserState
 from backend.models.event import Event
 from backend.auth import hash_password
 
@@ -46,9 +47,15 @@ def seed():
             db.add(user)
             print(f"[+] Kullanıcı profili oluşturuldu (email: {SEED_USER_EMAIL}, şifre: {SEED_USER_PASSWORD})")
 
+        db.flush()
+        seed_user = db.query(UserProfile).filter(UserProfile.email == SEED_USER_EMAIL).first()
+
         # ──────────────────────────────────────────
         # 2. Örnek İş İlanları
         # ──────────────────────────────────────────
+        # NOT: match_score/status artık Job'da değil — Job tüm kullanıcılar
+        # arasında paylaşılan bir katalog satırı, bu alanlar JobUserState'e
+        # (seed kullanıcısına bağlı olarak) aşağıda ayrıca ekleniyor.
         if db.query(Job).count() == 0:
             now_utc = datetime.now(timezone.utc)
             jobs = [
@@ -62,8 +69,6 @@ def seed():
                     description="Savunma sanayii ve insansız hava araçları projelerinde görev alacak, analitik düşünme yeteneğine sahip proje mühendisi adayı.",
                     requirements="Mühendislik veya YBS öğrencisi, Proje Yönetimi, Python, Analitik Düşünce",
                     sector="Savunma Sanayii / Teknoloji",
-                    match_score=88.0,
-                    status="new",
                     posted_at=now_utc - timedelta(days=2),
                     deadline=now_utc + timedelta(days=14),
                 ),
@@ -77,8 +82,6 @@ def seed():
                     description="Bilgi sistemleri denetimi, süreç analizi ve ERP sistemleri üzerinde çalışacak stajyer aranıyor.",
                     requirements="YBS veya Endüstri Mühendisliği, SQL, Süreç Analizi, MS Office",
                     sector="Denetim / IT",
-                    match_score=92.0,
-                    status="new",
                     posted_at=now_utc - timedelta(days=5),
                     deadline=now_utc + timedelta(days=21),
                 ),
@@ -92,13 +95,18 @@ def seed():
                     description="K-Team genç yetenek programı kapsamında, web tabanlı iç uygulamaların geliştirilmesine destek olacak takım arkadaşı.",
                     requirements="Python, React, API Tasarımı, Git, Yenilikçi Düşünce",
                     sector="IT / Bilişim",
-                    match_score=85.0,
-                    status="new",
                     posted_at=now_utc - timedelta(days=1),
                     deadline=now_utc + timedelta(days=10),
                 )
             ]
             db.add_all(jobs)
+            db.flush()
+
+            if seed_user:
+                scores = [88.0, 92.0, 85.0]
+                for job, score in zip(jobs, scores):
+                    db.add(JobUserState(user_id=seed_user.id, job_id=job.id, match_score=score, status="new"))
+
             print(f"[+] {len(jobs)} örnek iş ilanı eklendi")
 
         # ──────────────────────────────────────────

@@ -14,6 +14,7 @@ from backend.models.inbox import EmailAccount
 from backend.automation.outreach_agent import OutreachAgent
 from backend.auth import get_current_user
 from backend.rate_limiter import limiter
+from backend.utils.db_helpers import get_or_create_job_state
 
 router = APIRouter(prefix="/applications", tags=["Başvurular"])
 
@@ -131,10 +132,11 @@ async def prepare_application(
 
     # CV Seçimi (yalnızca kendi CV'leri arasından)
     cv_query = db.query(CV).filter(CV.user_id == current_user.id)
+    job_state = get_or_create_job_state(db, current_user.id, job.id)
     if req.cv_id:
         cv = cv_query.filter(CV.id == req.cv_id).first()
-    elif job.best_cv_id:
-        cv = cv_query.filter(CV.id == job.best_cv_id).first()
+    elif job_state.best_cv_id:
+        cv = cv_query.filter(CV.id == job_state.best_cv_id).first()
     else:
         cv = cv_query.filter(CV.is_default == True).first()
 
@@ -218,7 +220,7 @@ def approve_application(
 
         job = db.query(Job).filter(Job.id == app.job_id).first()
         if job:
-            job.status = "applying"
+            get_or_create_job_state(db, current_user.id, job.id).status = "applying"
     else:
         app.status = "draft"
         app.rejection_reason = req.notes
@@ -324,7 +326,7 @@ def submit_application(
             app.send_status = "sent"
             app.send_error = None
             if job:
-                job.status = "applied"
+                get_or_create_job_state(db, current_user.id, job.id).status = "applied"
             db.commit()
             return {
                 "message": f"Başvuru {app.contact_email} adresine gönderildi. ✅",
@@ -343,7 +345,7 @@ def submit_application(
     app.submitted_at = datetime.now(timezone.utc)
     app.send_status = "not_applicable"
     if job:
-        job.status = "applied"
+        get_or_create_job_state(db, current_user.id, job.id).status = "applied"
     db.commit()
 
     return {

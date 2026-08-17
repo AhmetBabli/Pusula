@@ -55,7 +55,7 @@ def get_db():
 
 def init_db():
     """Create all tables. Call once at startup."""
-    from backend.models import user, cv, job, event, application, inbox, outreach  # noqa: F401
+    from backend.models import user, cv, job, job_user_state, event, application, inbox, outreach  # noqa: F401
     try:
         Base.metadata.create_all(bind=engine)
         logger.info(f"Database initialized successfully ({settings.DATABASE_TYPE})")

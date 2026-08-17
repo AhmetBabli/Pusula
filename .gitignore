@@ -19,6 +19,7 @@ env/
 
 # Database
 *.db
+*.db.bak
 *.sqlite3
 test_*.db
 

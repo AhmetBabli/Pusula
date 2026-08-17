@@ -21,7 +21,6 @@ class ScrapedJobContract(BaseModel):
     requirements: str = Field(default="")
     source: Literal["kariyer_net", "linkedin", "youthall", "arbeitnow"]
     job_type: Literal["staj", "tam_zamanlı", "yarı_zamanlı"] = "tam_zamanlı"
-    status: str = Field(default="new")
     sector: Optional[str] = None
     company_logo_url: Optional[str] = None
     posted_at: Optional[datetime] = None

@@ -22,6 +22,7 @@
   --color-on-background: 20 21 31;
   --color-primary: 59 63 140;
   --color-primary-container: 59 63 140;
+  --color-primary-light: 138 143 224;
   --color-on-primary: 255 255 255;
   --color-secondary: 91 96 114;
   --color-outline: 20 21 31;
@@ -44,6 +45,7 @@
   --color-on-background: 237 238 245;
   --color-primary: 138 143 224;
   --color-primary-container: 122 127 217;
+  --color-primary-light: 186 190 240;
   --color-on-primary: 15 16 22;
   --color-secondary: 146 150 168;
   --color-outline: 237 238 245;
@@ -64,18 +66,8 @@ body {
   0%, 100% { transform: translateY(0) rotate(0deg); }
   50% { transform: translateY(-6px) rotate(-1.5deg); }
 }
-@keyframes pusula-mascot-blink {
-  0%, 92%, 100% { transform: scaleY(1); }
-  95% { transform: scaleY(0.12); }
-}
 .pusula-mascot-body { animation: pusula-mascot-bob 3.2s ease-in-out infinite; }
-.pusula-mascot-eye {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: pusula-mascot-blink 4.5s ease-in-out infinite;
-}
-.pusula-mascot-needle,
-.pusula-mascot-pupils {
+.pusula-mascot-needle {
   transition: transform 0.6s cubic-bezier(.34, 1.56, .64, 1);
 }
 

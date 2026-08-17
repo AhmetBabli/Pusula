@@ -7,9 +7,9 @@ import { SpotlightOverlay } from './SpotlightOverlay';
 import { TourMascot } from './TourMascot';
 import { useTargetRect } from './useTargetRect';
 
-const MASCOT_SIZE = 88;
+const MASCOT_SIZE = 124;
 const GAP = 20;
-const BUBBLE_WIDTH = 300;
+const BUBBLE_WIDTH = 340;
 const MARGIN = 16;
 
 /** Hedefin konumuna göre maskot+balonun ekranda nereye yerleşeceğini hesaplar,
@@ -38,7 +38,7 @@ function computePosition(rect: DOMRect | null, placement: string) {
     top = rect.bottom + GAP;
   }
 
-  top = Math.min(Math.max(top, MARGIN), vh - 260);
+  top = Math.min(Math.max(top, MARGIN), vh - 300);
 
   return { left, top };
 }
@@ -51,10 +51,17 @@ export function TourOverlay() {
   if (!active || !step) return null;
 
   const { left, top } = computePosition(rect, step.placement);
-  const needleAngle = rect ? 0 : 0; // sabit merkez adımlarda ibre nötr
-  const look: [number, number] = rect
-    ? [Math.max(-4, Math.min(4, (rect.left + rect.width / 2 - (left + MASCOT_SIZE / 2)) / 40)), 0]
-    : [0, -1];
+
+  // İğne, gözlerin yerini alan tek "canlı" detay: gerçek bir pusula gibi
+  // hedefin yönünü gösteriyor. Merkez adımlarda (hedef yok) nötr — yukarı bakar.
+  let needleAngle = 0;
+  if (rect) {
+    const mascotCenterX = left + MASCOT_SIZE * 0.5;
+    const mascotCenterY = top + MASCOT_SIZE * 0.4;
+    const dx = rect.left + rect.width / 2 - mascotCenterX;
+    const dy = rect.top + rect.height / 2 - mascotCenterY;
+    needleAngle = (Math.atan2(dx, -dy) * 180) / Math.PI;
+  }
 
   return (
     <>
@@ -71,28 +78,28 @@ export function TourOverlay() {
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           style={{ left, top }}
         >
-          <TourMascot size={MASCOT_SIZE} needleAngle={needleAngle} look={look} className="shrink-0" />
+          <TourMascot size={MASCOT_SIZE} needleAngle={needleAngle} className="shrink-0" />
 
           <div
-            className="bg-surface-container border border-outline-variant/10 rounded-2xl shadow-2xl shadow-black/10 p-5 relative"
+            className="bg-surface-container border border-outline-variant/10 rounded-2xl shadow-2xl shadow-black/10 p-6 relative"
             style={{ width: BUBBLE_WIDTH }}
           >
             <button
               onClick={skip}
-              className="absolute top-3 right-3 text-on-surface-variant hover:text-on-surface transition-colors"
+              className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface transition-colors"
               aria-label={t('tour_v2_skip')}
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="text-[11px] font-label font-semibold text-primary mb-2 tracking-wide">
+            <div className="text-xs font-label font-semibold text-primary mb-2.5 tracking-wide">
               {t('tour_v2_step_label')} {stepIndex + 1}/{totalSteps}
             </div>
 
-            <h3 className="text-base font-headline font-bold text-on-surface mb-1.5 pr-4">{t(step.titleKey)}</h3>
-            <p className="text-sm font-body text-on-surface-variant leading-relaxed mb-4">{t(step.descKey)}</p>
+            <h3 className="text-lg font-headline font-bold text-on-surface mb-2 pr-4">{t(step.titleKey)}</h3>
+            <p className="text-[15px] font-body text-on-surface-variant leading-relaxed mb-5">{t(step.descKey)}</p>
 
-            <div className="h-1 bg-surface-container-highest rounded-full overflow-hidden mb-4">
+            <div className="h-1.5 bg-surface-container-highest rounded-full overflow-hidden mb-5">
               <motion.div
                 className="h-full bg-primary rounded-full"
                 initial={false}

@@ -7,7 +7,8 @@ import re
 import logging
 from typing import Optional
 import httpx
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from backend.config import settings
 
 logger = logging.getLogger("CvArchitectAgent")
@@ -99,6 +100,7 @@ async def build_ats_cv(
     target_job_title: str = "",
     target_job_description: str = "",
     extra_experience: str = "",
+    api_key: Optional[str] = None,
 ) -> str:
     """
     GitHub verisi + kullanıcı profili + hedef ilan → ATS-uyumlu CV Markdown.
@@ -137,15 +139,30 @@ Ek Deneyim: {extra_experience or 'Belirtilmemiş'}
 Sadece CV metnini döndür, ek açıklama ekleme."""
 
     try:
-        model = genai.GenerativeModel(
-            settings.GEMINI_MODEL,
-            generation_config=genai.GenerationConfig(response_mime_type="text/plain"),
-        )
-        response = await model.generate_content_async(prompt)
+        client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=prompt)
         return response.text.strip()
     except Exception as e:
         logger.error(f"[CvArchitect] CV üretim hatası: {e}")
-        return f"# {user_name}\n{email}\n\n## Teknik Beceriler\n{', '.join(all_skills)}"
+        # AI şu an ulaşılamıyor (ör. kota) — elimizdeki gerçek verilerle (AI
+        # formatlaması olmadan) yine de eksiksiz, sunulabilir bir CV üret.
+        # Önceki sürüm burada sadece ad+e-posta+beceri döndürüyordu, üniversite/
+        # bölüm/GitHub projeleri gibi zaten elimizde olan veriyi bile atlıyordu.
+        sections = [f"# {user_name}", email]
+        if university or department:
+            sections.append(f"\n## Eğitim\n{university or ''} — {department or ''}".strip())
+        if all_skills:
+            sections.append(f"\n## Teknik Beceriler\n{', '.join(all_skills)}")
+        if extra_experience:
+            sections.append(f"\n## Deneyim\n{extra_experience}")
+        if github_repos:
+            sections.append(f"\n## Projeler\n{repo_summaries}")
+        sections.append(
+            "\n\n*Not: AI servisi şu an geçici olarak ulaşılamaz durumda olduğu için "
+            "bu CV otomatik biçimlendirme olmadan hazırlandı. Birazdan tekrar "
+            "deneyerek daha ayrıntılı bir sürüm üretebilirsiniz.*"
+        )
+        return "\n".join(sections)
 
 
 def export_cv_to_pdf(markdown_text: str, output_path: str) -> bool:

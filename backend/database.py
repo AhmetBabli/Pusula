@@ -2,7 +2,7 @@
 Kariyer Ajanı — Database Setup (SQLAlchemy + SQLite/PostgreSQL)
 """
 import logging
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from backend.config import settings
 
@@ -25,6 +25,17 @@ elif settings.DATABASE_TYPE == "postgresql":
 
 engine = create_engine(settings.DATABASE_URL, **engine_config)
 
+# SQLite'ta foreign key zorlaması VARSAYILAN OLARAK KAPALIDIR — modellerdeki
+# ondelete="CASCADE"/"SET NULL" tanımları bu PRAGMA açılmadan sessizce hiçbir
+# şey yapmaz (silinen bir CV/iş ilanı/e-posta hesabı, bağlı Application/InboxItem
+# satırlarını "sahipsiz" bırakır). Her yeni bağlantıda açıkça etkinleştiriyoruz.
+if settings.DATABASE_TYPE == "sqlite":
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -44,7 +55,7 @@ def get_db():
 
 def init_db():
     """Create all tables. Call once at startup."""
-    from backend.models import user, cv, job, event, application, inbox  # noqa: F401
+    from backend.models import user, cv, job, event, application, inbox, outreach  # noqa: F401
     try:
         Base.metadata.create_all(bind=engine)
         logger.info(f"Database initialized successfully ({settings.DATABASE_TYPE})")

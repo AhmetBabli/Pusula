@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Boolean
 from backend.database import Base
+from backend.utils.crypto import encrypt, decrypt
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"
@@ -31,6 +32,10 @@ class UserProfile(Base):
     github_url = Column(String(300), nullable=True)
     summary = Column(Text, nullable=True)  # Kısa biyografi
 
+    # Kullanıcının kendi Gemini API key'i (şifreli) — her kullanıcı kendi
+    # kotasını kullansın diye. Boşsa backend'in paylaşılan .env key'ine düşülür.
+    _gemini_api_key = Column("gemini_api_key", String(500), nullable=True)
+
     # Kayıt sonrası bölüm-tanıtımı + bilgi formu tamamlandı mı?
     onboarding_completed = Column(Boolean, default=False, nullable=False)
 
@@ -39,5 +44,17 @@ class UserProfile(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Not: get_target_sectors, get_skills gibi manuel JSON parse eden metodlar silindi.
-    # Artık sistemin herhangi bir yerinde `user.skills` çağırdığında sana zaten 
+    # Artık sistemin herhangi bir yerinde `user.skills` çağırdığında sana zaten
     # doğrudan ["Python", "SQL", "React"] formatında hazır Python listesi dönecektir.
+
+    @property
+    def gemini_api_key(self) -> str:
+        return decrypt(self._gemini_api_key) if self._gemini_api_key else ""
+
+    @gemini_api_key.setter
+    def gemini_api_key(self, value: str):
+        self._gemini_api_key = encrypt(value) if value else None
+
+    @property
+    def has_gemini_api_key(self) -> bool:
+        return bool(self._gemini_api_key)

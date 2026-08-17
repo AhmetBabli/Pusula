@@ -75,7 +75,11 @@ async def _run_web_search(session_id: str, query: str, location: str, db_user_id
 
     await push_agent_event(session_id, "web_search", "running", "Gemini Grounding aktif...", 10)
     try:
-        jobs = await search_jobs_live(query, location)
+        with SessionLocal() as db:
+            requester = db.query(UserProfile).filter(UserProfile.id == db_user_id).first()
+            requester_api_key = requester.gemini_api_key if requester else None
+
+        jobs = await search_jobs_live(query, location, api_key=requester_api_key)
         await push_agent_event(session_id, "web_search", "running", f"{len(jobs)} ilan bulundu, DB'ye kaydediliyor...", 70)
 
         saved = 0
@@ -127,6 +131,7 @@ async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[i
             target_job_title=job.title if job else "",
             target_job_description=job.description if job else "",
             extra_experience=extra_exp,
+            api_key=user.gemini_api_key,
         )
 
         await push_agent_event(session_id, "cv_architect", "running", "PDF oluşturuluyor...", 80)
@@ -163,40 +168,40 @@ async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[i
 
 async def _run_outreach(session_id: str, company_name: str, job_title: str, job_desc: str, user_id: int):
     from backend.database import SessionLocal
-    import google.generativeai as genai
+    from backend.ai.gemini_client import _call_model_async_json
 
     await push_agent_event(session_id, "outreach", "running", "Profil ve CV okunuyor...", 10)
     try:
         with SessionLocal() as db:
             user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
             cv = db.query(CV).filter(CV.user_id == user_id).order_by(CV.is_default.desc()).first()
+            user_api_key = user.gemini_api_key if user else ""
 
         cv_text = cv.extracted_text[:1500] if cv else ""
         skills_str = ", ".join(user.skills or [])
 
-        await push_agent_event(session_id, "outreach", "running", "Cold email taslağı oluşturuluyor...", 40)
+        await push_agent_event(session_id, "outreach", "running", "Taslaklar oluşturuluyor...", 40)
 
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
-        email_prompt = f"""Profesyonel bir kariyer danışmanısın.
-"{company_name}" şirketine "{job_title}" pozisyonu için etkileyici, kişiselleştirilmiş bir cold email yaz.
+        # Cold email + LinkedIn DM'i tek istekte üretiyoruz — ayrı ayrı
+        # gönderilen iki ardışık çağrı, aynı dakika içinde Gemini'nin
+        # ücretsiz kotasında sık sık "high demand" (503) hatasına yol
+        # açıyordu; birleştirmek hem daha güvenilir hem de kotayı yarıya indiriyor.
+        prompt = f"""Profesyonel bir kariyer danışmanısın.
+"{company_name}" şirketine "{job_title}" pozisyonu için başvuran bir aday için iki ayrı metin hazırla.
+
 Aday: {user.full_name}, {user.university} {user.department}
 Beceriler: {skills_str}
 İlan: {job_desc[:300]}
 CV özeti: {cv_text[:300]}
 
-Kurallar: Max 200 kelime, resmi ama samimi, spesifik değer önerisi sun, "Sayın İlgili," ile başla."""
+1) cold_email: Etkileyici, kişiselleştirilmiş bir cold email. Max 200 kelime, resmi ama samimi, spesifik değer önerisi sun, "Sayın İlgili," ile başla.
+2) linkedin_dm: LinkedIn'de {company_name} çalışanına gönderilecek kısa DM taslağı. Max 80 kelime, kişisel ve doğal.
 
-        email_resp = await model.generate_content_async(email_prompt)
-        cold_email = email_resp.text.strip()
+Şu JSON formatında yanıt ver: {{"cold_email": "...", "linkedin_dm": "..."}}"""
 
-        await push_agent_event(session_id, "outreach", "running", "LinkedIn DM taslağı oluşturuluyor...", 75)
-
-        dm_prompt = f"""LinkedIn'de {company_name} çalışanına gönderilecek kısa DM taslağı yaz.
-Aday: {user.full_name}, {user.department}
-Pozisyon: {job_title}
-Max 80 kelime, kişisel ve doğal."""
-        dm_resp = await model.generate_content_async(dm_prompt)
-        linkedin_dm = dm_resp.text.strip()
+        result = await _call_model_async_json(prompt, api_key=user_api_key)
+        cold_email = (result.get("cold_email") or "").strip()
+        linkedin_dm = (result.get("linkedin_dm") or "").strip()
 
         await push_agent_event(
             session_id, "outreach", "done", "Taslaklar hazır!", 100,
@@ -228,7 +233,8 @@ async def _run_strategy(session_id: str, target_job: str, target_location: str, 
             current_title=user.department or "Junior",
             target_job=target_job,
             target_location=target_location,
-            github_analysis=repo_summary
+            github_analysis=repo_summary,
+            api_key=user.gemini_api_key,
         )
 
         await push_agent_event(
@@ -297,6 +303,7 @@ async def interview_start(
         round_type=req.round_type,
         count=req.question_count,
         user_context=user_context,
+        api_key=current_user.gemini_api_key,
     )
     return {"session_id": req.session_id, "questions": questions, "total": len(questions)}
 
@@ -313,6 +320,7 @@ async def interview_answer(req: InterviewAnswerRequest, current_user: UserProfil
         hint=req.hint,
         job_title=req.job_title,
         company_name=req.company_name,
+        api_key=current_user.gemini_api_key,
     )
     return {"question_id": req.question_id, "evaluation": result}
 
@@ -334,13 +342,13 @@ async def generate_outreach_sync(
     current_user: UserProfile = Depends(get_current_user),
 ):
     """Cold email + LinkedIn DM taslağı üretir (Senkron)."""
-    import google.generativeai as genai
+    from google import genai
 
     cv = db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.is_default.desc()).first()
     cv_text = cv.extracted_text[:1500] if cv else ""
     skills_str = ", ".join(current_user.skills or [])
 
-    model = genai.GenerativeModel(settings.GEMINI_MODEL)
+    client = genai.Client(api_key=current_user.gemini_api_key or settings.GEMINI_API_KEY)
     email_prompt = f"""Profesyonel bir kariyer danışmanısın.
 "{req.company_name}" şirketine "{req.job_title}" pozisyonu için etkileyici, kişiselleştirilmiş bir cold email yaz.
 Aday: {current_user.full_name}, {current_user.university} {current_user.department}
@@ -350,14 +358,14 @@ CV özeti: {cv_text[:300]}
 
 Kurallar: Max 200 kelime, resmi ama samimi, spesifik değer önerisi sun, "Sayın İlgili," ile başla."""
 
-    email_resp = await model.generate_content_async(email_prompt)
+    email_resp = await client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=email_prompt)
     cold_email = email_resp.text.strip()
 
     dm_prompt = f"""LinkedIn'de {req.company_name} çalışanına gönderilecek kısa DM taslağı yaz.
 Aday: {current_user.full_name}, {current_user.department}
 Pozisyon: {req.job_title}
 Max 80 kelime, kişisel ve doğal."""
-    dm_resp = await model.generate_content_async(dm_prompt)
+    dm_resp = await client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=dm_prompt)
     linkedin_dm = dm_resp.text.strip()
 
     return {"cold_email": cold_email, "linkedin_dm": linkedin_dm}

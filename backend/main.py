@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from backend.config import settings
 from backend.database import init_db
@@ -112,9 +113,10 @@ def create_app() -> FastAPI:
     }
     app.add_middleware(CORSMiddleware, **cors_config)
     
-    # Rate limiting
+    # Rate limiting — middleware olmadan @limiter.limit(...) dekoratörleri hiçbir işe yaramıyordu
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_error_handler)
+    app.add_middleware(SlowAPIMiddleware)
 
     # Router'lar
     app.include_router(auth_router.router, prefix="/api")

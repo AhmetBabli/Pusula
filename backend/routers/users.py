@@ -21,6 +21,7 @@ class ProfileUpdate(BaseModel):
     github_url: Optional[str] = None
     summary: Optional[str] = None
     onboarding_completed: Optional[bool] = None
+    gemini_api_key: Optional[str] = None
 
 # Not: hashed_password kasıtlı olarak dışarıda bırakıldı — asla API yanıtına sızmamalı.
 class UserProfileOut(BaseModel):
@@ -38,6 +39,7 @@ class UserProfileOut(BaseModel):
     github_url: Optional[str] = None
     summary: Optional[str] = None
     onboarding_completed: bool = False
+    has_gemini_api_key: bool = False
 
     class Config:
         from_attributes = True

@@ -4,8 +4,9 @@ Mevcut profil vs Hedef pozisyon analizi + 6 aylık yol haritası.
 """
 import json
 import logging
-from typing import List, Dict, Any
-import google.generativeai as genai
+from typing import List, Dict, Any, Optional
+from google import genai
+from google.genai import types
 from backend.config import settings
 
 logger = logging.getLogger("StrategyAgent")
@@ -15,7 +16,8 @@ async def generate_career_strategy(
     current_title: str,
     target_job: str,
     target_location: str = "Global",
-    github_analysis: str = ""
+    github_analysis: str = "",
+    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Kullanıcı için stratejik yol haritası ve pazar analizi üretir.
@@ -56,11 +58,11 @@ Lütfen şu formatta JSON döndür:
 SADECE JSON döndür."""
 
     try:
-        # Eski SDK uyumluluğu için genai kullanıyoruz (FutureWarning verse de çalışır)
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
-        response = await model.generate_content_async(
-            prompt,
-            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
         )
         return json.loads(response.text)
     except Exception as e:

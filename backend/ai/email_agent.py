@@ -2,7 +2,9 @@ import json
 import logging
 from typing import Optional, Dict, Literal
 from pydantic import BaseModel, Field, ValidationError
-from backend.ai.gemini_client import _get_model  # require_json parametresini desteklediğini varsayıyoruz
+from google.genai import types
+from backend.ai.gemini_client import _get_client
+from backend.config import settings
 
 # Loglama yapılandırması
 logger = logging.getLogger("EmailIntelligenceAgent")
@@ -26,7 +28,7 @@ class EmailIntelligenceAgent:
     """
 
     @staticmethod
-    async def process_email(subject: str, sender: str, body: str) -> Optional[Dict]:
+    async def process_email(subject: str, sender: str, body: str, api_key: Optional[str] = None) -> Optional[Dict]:
         """
         Processes a raw/cleaned email to find career opportunities.
         Returns None if the email is junk/irrelevant.
@@ -56,12 +58,13 @@ Aşağıdaki şemaya tam olarak uyan SADECE geçerli bir JSON döndür:
 }}"""
 
         try:
-            # Önceki refactor'da eklediğimiz require_json=True özelliği kullanılıyor
-            model = _get_model(require_json=True)
-            
-            # Asenkron çağrı (Event loop bloklanmaz)
-            response = await model.generate_content_async(prompt)
-            
+            client = _get_client(api_key)
+            response = await client.aio.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
+
             if not response or not hasattr(response, "text"):
                 raise ValueError("Modelden geçerli bir yanıt dönmedi.")
 

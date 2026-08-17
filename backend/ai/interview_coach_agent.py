@@ -4,8 +4,9 @@ Kariyer Ajanı 2.0 — Interview Coach Agent
 """
 import json
 import logging
-from typing import Literal
-import google.generativeai as genai
+from typing import Literal, Optional
+from google import genai
+from google.genai import types
 from backend.config import settings
 
 logger = logging.getLogger("InterviewCoachAgent")
@@ -50,6 +51,7 @@ async def generate_questions(
     round_type: Literal["technical", "hr", "mixed"] = "mixed",
     count: int = 5,
     user_context: str = "",
+    api_key: Optional[str] = None,
 ) -> list[dict]:
     """
     Şirket kültürüne + ilan içeriğine + adayın profiline uygun mülakat soruları üretir.
@@ -87,11 +89,12 @@ Her soru için şu JSON formatını kullan:
 SADECE JSON döndür, açıklama ekleme. {count} soru üret."""
 
     try:
-        model = genai.GenerativeModel(
-            settings.GEMINI_MODEL,
-            generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+        client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
         )
-        response = await model.generate_content_async(prompt)
         questions = json.loads(response.text)
         logger.info(f"[InterviewCoach] {len(questions)} soru üretildi.")
         return questions
@@ -110,6 +113,7 @@ async def evaluate_answer(
     hint: str,
     job_title: str,
     company_name: str,
+    api_key: Optional[str] = None,
 ) -> dict:
     """
     Kullanıcının cevabını değerlendirir.
@@ -133,11 +137,12 @@ Cevabı değerlendir. JSON formatında döndür:
 }}"""
 
     try:
-        model = genai.GenerativeModel(
-            settings.GEMINI_MODEL,
-            generation_config=genai.GenerationConfig(response_mime_type="application/json"),
+        client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
         )
-        response = await model.generate_content_async(prompt)
         result = json.loads(response.text)
         result["score"] = max(0, min(100, int(result.get("score", 50))))
         return result

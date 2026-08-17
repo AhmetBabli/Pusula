@@ -1,5 +1,7 @@
 import imaplib
 import email
+import base64
+import requests
 from email.policy import default
 from email.header import decode_header
 from datetime import datetime, date, timedelta, timezone
@@ -107,6 +109,79 @@ class GmailService:
         except Exception as e:
             logger.error(f"E-postaları çekerken hata oluştu: {e}")
             return []
+
+    @staticmethod
+    def fetch_via_gmail_api(access_token: str, limit: int = 20) -> List[dict]:
+        """OAuth ile bağlı hesaplar için IMAP yerine Gmail API (REST) üzerinden
+        son e-postaları çeker — uygulama şifresi gerektirmez."""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        try:
+            list_res = requests.get(
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+                headers=headers,
+                params={"maxResults": limit, "q": "newer_than:30d"},
+                timeout=15,
+            )
+            if not list_res.ok:
+                logger.error(f"[Gmail API] Mesaj listesi alınamadı: {list_res.status_code} {list_res.text}")
+                return []
+
+            message_ids = [m["id"] for m in list_res.json().get("messages", [])]
+            results = []
+            for msg_id in message_ids:
+                msg_res = requests.get(
+                    f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}",
+                    headers=headers,
+                    params={"format": "full"},
+                    timeout=15,
+                )
+                if not msg_res.ok:
+                    continue
+                msg = msg_res.json()
+                payload = msg.get("payload", {})
+                header_map = {h["name"]: h["value"] for h in payload.get("headers", [])}
+                subject = header_map.get("Subject", "(No Subject)")
+                sender = header_map.get("From", "(Unknown Sender)")
+
+                try:
+                    received_at = email.utils.parsedate_to_datetime(header_map.get("Date"))
+                except (TypeError, ValueError):
+                    received_at = datetime.now(timezone.utc)
+
+                results.append({
+                    "uid": msg_id,
+                    "subject": subject,
+                    "sender": sender,
+                    "body": GmailService._extract_api_body(payload),
+                    "received_at": received_at,
+                })
+            return results
+        except requests.RequestException as e:
+            logger.error(f"[Gmail API] Ağ hatası: {e}")
+            return []
+
+    @staticmethod
+    def _extract_api_body(payload: dict) -> str:
+        """Gmail API mesaj payload'ından (base64url) düz metin gövdeyi çıkarır."""
+        def decode_part(data: str) -> str:
+            try:
+                return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8", errors="replace")
+            except Exception:
+                return ""
+
+        mime_type = payload.get("mimeType", "")
+        body_data = payload.get("body", {}).get("data")
+        if mime_type == "text/plain" and body_data:
+            return decode_part(body_data)
+        if mime_type == "text/html" and body_data:
+            html = decode_part(body_data)
+            return bs4.BeautifulSoup(html, "html.parser").get_text(separator="\n").strip()
+
+        for part in payload.get("parts", []) or []:
+            text = GmailService._extract_api_body(part)
+            if text:
+                return text
+        return ""
 
     @staticmethod
     def _decode_header(header_value: str) -> str:

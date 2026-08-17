@@ -4,27 +4,25 @@ Gemini Grounding ile canlı iş ilanı ve şirket haberi araması.
 """
 import logging
 from typing import Optional
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from backend.config import settings
 
 logger = logging.getLogger("WebSearchAgent")
 
-if settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+
+def _get_client(api_key: Optional[str] = None) -> genai.Client:
+    return genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
 
 
-def _grounding_model():
-    """Google Search grounding aktif Gemini modeli döner."""
-    tool = genai.protos.Tool(
-        google_search=genai.protos.GoogleSearch()
-    )
-    return genai.GenerativeModel(
-        model_name=settings.GEMINI_MODEL,
-        tools=[tool],
+def _grounding_config() -> types.GenerateContentConfig:
+    """Google Search grounding aktif üretim konfigürasyonu döner."""
+    return types.GenerateContentConfig(
+        tools=[types.Tool(google_search=types.GoogleSearch())]
     )
 
 
-async def search_jobs_live(query: str, location: str = "Türkiye") -> list[dict]:
+async def search_jobs_live(query: str, location: str = "Türkiye", api_key: Optional[str] = None) -> list[dict]:
     """
     Gemini Grounding ile gerçek zamanlı iş/staj ilanı arar.
     Döndürülen liste ScrapedJobContract uyumlu dict'lerdir.
@@ -46,8 +44,10 @@ Yanıtı SADECE şu JSON dizisi formatında ver, başka açıklama ekleme:
 [{{"title":"...","company":"...","location":"...","source_url":"...","description":"...","job_type":"..."}}]
 """
     try:
-        model = _grounding_model()
-        response = await model.generate_content_async(prompt)
+        client = _get_client(api_key)
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL, contents=prompt, config=_grounding_config()
+        )
         import json, re
         text = response.text.strip()
         # JSON bloğunu ayıkla
@@ -65,7 +65,7 @@ Yanıtı SADECE şu JSON dizisi formatında ver, başka açıklama ekleme:
     return []
 
 
-async def get_company_news(company_name: str) -> list[dict]:
+async def get_company_news(company_name: str, api_key: Optional[str] = None) -> list[dict]:
     """Şirket hakkında son haberleri çeker."""
     prompt = f"""
 "{company_name}" şirketi hakkında son 30 günlük haberleri bul.
@@ -75,8 +75,10 @@ JSON formatında döndür:
 [{{"headline":"...","summary":"...","date":"YYYY-MM-DD","url":"..."}}]
 """
     try:
-        model = _grounding_model()
-        response = await model.generate_content_async(prompt)
+        client = _get_client(api_key)
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL, contents=prompt, config=_grounding_config()
+        )
         import json, re
         text = response.text.strip()
         match = re.search(r'\[.*\]', text, re.DOTALL)

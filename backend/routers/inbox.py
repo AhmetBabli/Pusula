@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel, EmailStr
+from datetime import datetime
 import asyncio
 import logging
 
@@ -9,6 +10,7 @@ from backend.database import get_db, SessionLocal # SessionLocal arka plan için
 from backend.models.inbox import EmailAccount, InboxItem
 from backend.models.user import UserProfile
 from backend.automation.gmail_service import GmailService
+from backend.automation.outreach_agent import OutreachAgent
 from backend.ai.email_agent import EmailIntelligenceAgent
 from backend.auth import get_current_user
 
@@ -35,7 +37,7 @@ class InboxItemOut(BaseModel):
     title: str
     sender: str
     body_summary: str
-    received_at: str
+    received_at: datetime
     is_read: bool
 
     class Config:
@@ -101,12 +103,18 @@ async def sync_inbox(
     # DB objelerini arka plana doğrudan yollayamayız! Session kapanır.
     # Bu yüzden sadece ihtiyaç olan verileri (id, email, pass) basit sözlüklere (dict) çeviriyoruz.
     accounts_data = [
-        {"id": acc.id, "email": acc.email, "app_password": acc.app_password} 
+        {
+            "id": acc.id,
+            "email": acc.email,
+            "app_password": acc.app_password,
+            "auth_method": acc.auth_method,
+            "oauth_refresh_token": acc.oauth_refresh_token,
+        }
         for acc in accounts
     ]
     
     # İşlemi arka plana devret ve hemen cevap dön
-    background_tasks.add_task(run_sync_background, accounts_data)
+    background_tasks.add_task(run_sync_background, accounts_data, current_user.gemini_api_key)
     
     return {
         "status": "processing", 
@@ -115,30 +123,43 @@ async def sync_inbox(
 
 # ── Arka Plan Görevi (Sync Logic) ──
 
-async def run_sync_background(accounts_data: list):
+async def run_sync_background(accounts_data: list, api_key: str = ""):
     """Fetch and analyze emails from linked accounts in the background."""
     
     # Arka plan görevi API'den koptuğu için kendi DB session'ını açar
     with SessionLocal() as db:
         for acc_data in accounts_data:
             logger.info(f"[Inbox] Syncing account: {acc_data['email']}")
+            service = None
             try:
-                service = GmailService(acc_data["email"], acc_data["app_password"])
-                
-                # Ağır I/O işlemlerini threadpool'a yolluyoruz (sunucu kilitlenmesin diye)
-                is_connected = await asyncio.to_thread(service.connect)
-                if not is_connected:
-                    logger.error(f"[-] Gmail connection failed for {acc_data['email']}")
-                    continue
-                
-                logger.info(f"[Inbox] Connected to {acc_data['email']}, fetching emails...")
-                emails = await asyncio.to_thread(service.fetch_latest_emails, limit=20)
+                if acc_data.get("auth_method") == "oauth":
+                    # OAuth ile bağlı hesaplarda uygulama şifresi yok — IMAP yerine
+                    # Gmail API'yi kısa ömürlü bir access_token ile kullanıyoruz.
+                    access_token = OutreachAgent.refresh_google_access_token(acc_data.get("oauth_refresh_token"))
+                    if not access_token:
+                        logger.error(
+                            f"[-] OAuth access token yenilenemedi ({acc_data['email']}) — "
+                            "gmail.readonly izni verilmemiş olabilir, hesabı yeniden bağlayın."
+                        )
+                        continue
+                    emails = await asyncio.to_thread(GmailService.fetch_via_gmail_api, access_token, 20)
+                else:
+                    service = GmailService(acc_data["email"], acc_data["app_password"])
+                    # Ağır I/O işlemlerini threadpool'a yolluyoruz (sunucu kilitlenmesin diye)
+                    is_connected = await asyncio.to_thread(service.connect)
+                    if not is_connected:
+                        logger.error(f"[-] Gmail connection failed for {acc_data['email']}")
+                        continue
+                    emails = await asyncio.to_thread(service.fetch_latest_emails, limit=20)
+
                 logger.info(f"[Inbox] Fetched {len(emails)} emails from {acc_data['email']}")
-                
+
                 new_count = 0
                 for mail_data in emails:
-                    # Daha önce işlenmiş mi kontrol et
-                    existing = db.query(InboxItem).filter(InboxItem.uid == mail_data["uid"]).first()
+                    # Daha önce işlenmiş mi kontrol et (uid yalnızca aynı hesap içinde benzersiz)
+                    existing = db.query(InboxItem).filter(
+                        InboxItem.account_id == acc_data["id"], InboxItem.uid == mail_data["uid"]
+                    ).first()
                     if existing:
                         continue
                         
@@ -147,7 +168,8 @@ async def run_sync_background(accounts_data: list):
                         intelligence = await EmailIntelligenceAgent.process_email(
                             mail_data["subject"],
                             mail_data["sender"],
-                            mail_data["body"]
+                            mail_data["body"],
+                            api_key=api_key,
                         )
                         
                         if intelligence:
@@ -171,8 +193,9 @@ async def run_sync_background(accounts_data: list):
                 db.commit()
                 logger.info(f"[Inbox] Added {new_count} new career items from {acc_data['email']}")
                 
-                # Bağlantıyı kapat
-                await asyncio.to_thread(service.disconnect)
+                # Bağlantıyı kapat (yalnızca IMAP yolunda bir bağlantı açıldıysa)
+                if service is not None:
+                    await asyncio.to_thread(service.disconnect)
                 
             except Exception as e:
                 db.rollback()

@@ -3,7 +3,7 @@ import json
 import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
@@ -46,10 +46,23 @@ class CVOut(BaseModel):
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
     target_keywords: List[str] = Field(default_factory=list)
-    is_default: bool
-    is_ai_generated: bool
+    is_default: bool = False
+    is_ai_generated: bool = False
     file_path: Optional[str] = None
-    
+
+    # DB'de bu alanlar NULL olsa bile (ör. eski/elle eklenmiş kayıtlar) yanıt
+    # şeması çökmesin — boş liste / False'a sessizce indirger. Daha önce tek bir
+    # NULL satır GET /cvs/'in TÜM listeyi 500 ile çökertmesine yol açmıştı.
+    @field_validator("strengths", "weaknesses", "target_keywords", mode="before")
+    @classmethod
+    def _none_to_empty_list(cls, v):
+        return v if v is not None else []
+
+    @field_validator("is_default", "is_ai_generated", mode="before")
+    @classmethod
+    def _none_to_false(cls, v):
+        return v if v is not None else False
+
     class Config:
         from_attributes = True
 
@@ -69,18 +82,18 @@ def extract_pdf_text_sync(file_path: str) -> str:
         logger.error(f"[CV] PDF Okuma hatası: {e}")
         return ""
 
-async def background_ats_analysis(cv_id: int):
+async def background_ats_analysis(cv_id: int, api_key: str = ""):
     """ATS analizini arka planda yaparak API'yi bekletmez."""
     from backend.ai.gemini_client import analyze_cv_ats
-    
+
     with SessionLocal() as db:
         cv = db.query(CV).filter(CV.id == cv_id).first()
         if not cv or not cv.extracted_text:
             return
-            
+
         try:
             logger.info(f"[CV] {cv.title} için otonom AI analizi başladı...")
-            result = await analyze_cv_ats(cv.extracted_text)
+            result = await analyze_cv_ats(cv.extracted_text, api_key=api_key)
             
             cv.ats_score = result.get("score", 0)
             cv.ats_feedback = result.get("feedback", "")
@@ -166,7 +179,7 @@ async def upload_cv(
     # ATS Analizini Background Task'a atıyoruz. 
     # API anında cevap dönerken Gemini analizi arkada devam edecek.
     if extracted_text and len(extracted_text.strip()) > 50:
-        background_tasks.add_task(background_ats_analysis, cv.id)
+        background_tasks.add_task(background_ats_analysis, cv.id, current_user.gemini_api_key)
 
     return {
         "id": cv.id, 
@@ -196,6 +209,7 @@ async def generate_cv(
         variant_type=req.variant_type,
         experience=req.experience,
         projects=req.projects,
+        api_key=current_user.gemini_api_key,
     )
 
     variant_titles = {
@@ -230,7 +244,7 @@ async def ats_analyze(
     if not cv.extracted_text:
         raise HTTPException(status_code=400, detail="CV metni bulunamadı")
 
-    background_tasks.add_task(background_ats_analysis, cv.id)
+    background_tasks.add_task(background_ats_analysis, cv.id, current_user.gemini_api_key)
     return {"message": "ATS analizi başlatıldı. Sonuçlar birazdan güncellenecek."}
 
 @router.delete("/{cv_id}")

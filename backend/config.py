@@ -36,11 +36,19 @@ class Settings:
 
     # AI
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")
+    # "gemini-2.0-flash" Google tarafından kaldırıldı (404). "-latest" bir alias
+    # olduğu için Google modeli rotasyona soktukça burayı elle güncellemeye gerek
+    # kalmıyor — aynı sessiz kırılma bir daha yaşanmasın diye.
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "models/gemini-flash-latest")
 
     # Scraping
     SCRAPE_INTERVAL_HOURS: int = 6
     MAX_PAGES_PER_SCRAPE: int = 5
+
+    # Inbox — her yeni e-posta bir Gemini sınıflandırma çağrısı tüketir, o yüzden
+    # iş taramasından daha temkinli bir aralıkta çalışıyor (paylaşılan ücretsiz
+    # kotayı arka planda sessizce tüketmesin diye).
+    INBOX_SYNC_INTERVAL_MINUTES: int = 120
 
     # File upload limits
     MAX_UPLOAD_SIZE_MB: int = 5

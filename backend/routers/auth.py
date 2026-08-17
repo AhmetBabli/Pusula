@@ -2,7 +2,7 @@ import logging
 import secrets
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 
@@ -11,6 +11,7 @@ from backend.database import get_db
 from backend.models.user import UserProfile
 from backend.models.inbox import EmailAccount
 from backend.auth import create_access_token, hash_password, verify_password
+from backend.rate_limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 logger = logging.getLogger(__name__)
@@ -48,7 +49,8 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def register(request: Request, req: RegisterRequest, db: Session = Depends(get_db)):
     """Yeni kullanıcı kaydı oluşturur ve otomatik giriş yapar (token döner)."""
     existing = db.query(UserProfile).filter(UserProfile.email == req.email).first()
     if existing:
@@ -82,7 +84,8 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/google", response_model=TokenResponse)
-def google_auth(req: GoogleAuthRequest, db: Session = Depends(get_db)):
+@limiter.limit("15/minute")
+def google_auth(request: Request, req: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Google ile giriş/kayıt: frontend'den gelen tek kullanımlık auth-code'u
     Google'ın token endpoint'inde değişip kullanıcıyı doğrular. Kullanıcı Gmail
     gönderim iznini (gmail.send) de verdiyse, aynı hesabı doğrudan e-posta
@@ -170,7 +173,8 @@ def google_auth(req: GoogleAuthRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
     """E-posta + şifre ile giriş yapar, JWT token döner."""
     user = db.query(UserProfile).filter(UserProfile.email == req.email).first()
     if not user or not verify_password(req.password, user.hashed_password):

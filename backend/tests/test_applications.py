@@ -45,12 +45,12 @@ def _seed_cv_and_job(db_session, email, source_url="https://example.com/ilan/1")
     return user, cv, job
 
 
-def _mock_letter_and_email(monkeypatch, email="ik@sirket.com", source="job_posting", letter="Sayın İnsan Kaynakları..."):
+def _mock_letter_and_email(monkeypatch, email="ik@sirket.com", source="job_posting", letter="Sayın İnsan Kaynakları...", source_url=""):
     async def fake_generate_cover_letter(**kwargs):
         return letter
 
     async def fake_find_job_contact_email(job, **kwargs):
-        return email, source
+        return email, source, source_url
 
     monkeypatch.setattr("backend.ai.gemini_client.generate_cover_letter", fake_generate_cover_letter)
     monkeypatch.setattr(
@@ -438,3 +438,51 @@ def test_mark_responded_stops_followup_eligibility(client, db_session, monkeypat
     listed = client.get("/api/applications/", headers=headers).json()
     app_out = next(a for a in listed if a["id"] == app_id)
     assert app_out["followup_eligible"] is False
+
+
+# ─── Gerçek Sonuç Takibi (interview/offer/rejected) ───
+
+def test_update_outcome_to_interview(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    app_id = _submit_with_real_email(client, headers, db_session, user.id, job, cv, monkeypatch)
+
+    res = client.patch(f"/api/applications/{app_id}/outcome", json={"outcome": "interview"}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "interview"
+
+    listed = client.get("/api/applications/", headers=headers).json()
+    app_out = next(a for a in listed if a["id"] == app_id)
+    assert app_out["status"] == "interview"
+    # Sonuç bildirmek bir yanıt geldiği anlamına gelir -> takip nudge'ı susmalı.
+    assert app_out["followup_eligible"] is False
+
+
+def test_update_outcome_rejects_invalid_value(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    app_id = _submit_with_real_email(client, headers, db_session, user.id, job, cv, monkeypatch)
+
+    res = client.patch(f"/api/applications/{app_id}/outcome", json={"outcome": "maybe"}, headers=headers)
+    assert res.status_code == 422
+
+
+def test_update_outcome_requires_submitted_application(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    _mock_letter_and_email(monkeypatch)
+
+    app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]  # hâlâ awaiting_approval
+    res = client.patch(f"/api/applications/{app_id}/outcome", json={"outcome": "interview"}, headers=headers)
+    assert res.status_code == 400
+
+
+def test_update_outcome_progression_interview_to_offer(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    app_id = _submit_with_real_email(client, headers, db_session, user.id, job, cv, monkeypatch)
+
+    client.patch(f"/api/applications/{app_id}/outcome", json={"outcome": "interview"}, headers=headers)
+    res = client.patch(f"/api/applications/{app_id}/outcome", json={"outcome": "offer"}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "offer"

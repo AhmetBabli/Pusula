@@ -27,7 +27,7 @@ import { useTaskStream } from './hooks/useTaskStream';
 import {
   getDashboardStats, getJobs, getApplications, getEvents, getCVs, getInboxItems,
   syncJobs, syncInbox, prepareApplication, approveApplication, submitApplication, answerCustomQuestions,
-  findReferrals, draftFollowup, sendFollowup, markResponded,
+  findReferrals, draftFollowup, sendFollowup, markResponded, updateApplicationOutcome,
   uploadCV, deleteCV, setDefaultCV, linkEmailAccount, getAccounts, prepareOutreach, sendOutreach,
   getProfile, getToken, logout as apiLogout,
 } from './services/api';
@@ -316,6 +316,12 @@ const App: React.FC = () => {
     await refreshApplications();
   };
 
+  const handleUpdateOutcome = async (id: number, outcome: string) => {
+    await updateApplicationOutcome(id, outcome);
+    await refreshApplications();
+    await refreshDashboard();
+  };
+
   const handleCvUpload = async (file: File, title: string, variant: string) => {
     await uploadCV(file, title, variant);
     await refreshCvs();
@@ -394,6 +400,7 @@ const App: React.FC = () => {
         onDraftFollowup={handleDraftFollowup}
         onSendFollowup={handleSendFollowup}
         onMarkResponded={handleMarkResponded}
+        onUpdateOutcome={handleUpdateOutcome}
       />
     ),
     events: <EventsView events={events} isLoading={eventsLoading} />,

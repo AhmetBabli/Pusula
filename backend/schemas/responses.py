@@ -18,6 +18,8 @@ class CVVariantPerformanceOut(BaseModel):
     application_count: int
     matched_job_count: int
     avg_match_score: float
+    interview_count: int = 0
+    offer_count: int = 0
 
 class DashboardStatsOut(BaseModel):
     total_jobs: int

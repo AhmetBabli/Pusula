@@ -6,6 +6,7 @@ import smtplib
 import logging
 import os
 from typing import Optional
+from urllib.parse import urlparse
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -30,7 +31,7 @@ class OutreachAgent:
     EMAIL_REGEX = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
     @classmethod
-    async def find_job_contact_email(cls, job, api_key: Optional[str] = None) -> tuple[str, str]:
+    async def find_job_contact_email(cls, job, api_key: Optional[str] = None) -> tuple[str, str, str]:
         """
         Bir ilan için başvuru e-postası bulur. Öncelik sırası:
         1. İlanın kendi metninde (description/requirements) geçen bir e-posta
@@ -39,7 +40,10 @@ class OutreachAgent:
            tahmine dayalı, daha düşük güven ama iş ilanı sitelerinden değil
            doğrudan şirketin kendi kariyer/iletişim sayfasından geldiği için
            eski DuckDuckGo-metin-tarama yöntemine göre çok daha isabetli.
-        Döndürür: (email_veya_bos_string, kaynak) — kaynak: "job_posting" | "company_site" | ""
+        Döndürür: (email_veya_bos_string, kaynak, kaynak_url) — kaynak:
+        "job_posting" | "company_site" | "". kaynak_url, kullanıcının onaydan
+        önce tıklayıp gerçekten şirketin sitesi mi diye kontrol edebileceği bir
+        şeffaflık linki (job_posting'de zaten ilanın kendisi olduğu için boş).
         """
         text = " ".join(filter(None, [getattr(job, "description", None), getattr(job, "requirements", None)]))
         if text:
@@ -47,25 +51,52 @@ class OutreachAgent:
             found = [e.lower() for e in cls.EMAIL_REGEX.findall(text) if not e.lower().endswith(invalid_extensions)]
             if found:
                 logger.info(f"[{job.company}] İlan metninden e-posta bulundu: {found[0]}")
-                return found[0], "job_posting"
+                return found[0], "job_posting", ""
 
-        guessed = await cls.hunt_email(job.company, api_key=api_key)
-        if guessed:
-            return guessed, "company_site"
+        email, source_url = await cls.hunt_email_with_source(job.company, api_key=api_key)
+        if email:
+            return email, "company_site", source_url
 
-        return "", ""
+        return "", "", ""
+
+    @staticmethod
+    def _domain_core(url_or_domain: str) -> str:
+        """Bir URL veya alan adından, karşılaştırmaya uygun 'çekirdek' ismi
+        çıkarır: 'mail.sirket.com.tr' -> 'sirket'. Mükemmel değil (ör. .co.uk
+        gibi bileşik TLD'lerde yanılabilir) ama e-posta/site alan adı
+        eşleşmesini kabaca doğrulamak için yeterince pratik."""
+        domain = urlparse(url_or_domain).netloc or url_or_domain
+        domain = domain.lower().removeprefix("www.")
+        known_suffixes = {"com", "co", "org", "net", "gov", "edu", "tr", "io", "biz", "info"}
+        parts = [p for p in domain.split(".") if p and p not in known_suffixes]
+        return parts[-1] if parts else domain
 
     @classmethod
     async def hunt_email(cls, company_name: str, api_key: Optional[str] = None) -> str:
+        """Geriye dönük uyumluluk için: sadece e-postayı döner. Kaynak URL'i
+        de gerekiyorsa (ör. kullanıcıya şeffaflık için göstermek) hunt_email_with_source
+        kullanın — ikisi de aynı Gemini çağrısını paylaşır."""
+        email, _source_url = await cls.hunt_email_with_source(company_name, api_key=api_key)
+        return email
+
+    @classmethod
+    async def hunt_email_with_source(cls, company_name: str, api_key: Optional[str] = None) -> tuple[str, str]:
         """
         Şirketin resmi web sitesini bulur (Gemini + Google Search grounding),
         kariyer/İK/iletişim sayfalarına bakar ve orada geçen bir e-posta adresi
         döndürür. Üçüncü parti iş ilanı sitelerinden değil, doğrudan şirketin
         kendi alan adından bilgi kullanılır (daha yüksek güven).
+
+        Ek doğrulama: bulunan e-postanın alan adı, Gemini'nin "resmi site"
+        olarak işaretlediği URL'in alan adıyla örtüşmüyorsa reddedilir —
+        model bazen alakasız bir e-posta ile alakasız bir "kaynak" sitesini
+        aynı yanıtta birleştirebiliyor, bu basit çapraz kontrol o durumu yakalar.
+
+        Döndürür: (email_veya_bos_string, source_url_veya_bos_string)
         """
         effective_key = api_key or settings.GEMINI_API_KEY
         if not effective_key:
-            return ""
+            return "", ""
 
         prompt = f"""Google araması kullanarak "{company_name}" şirketinin RESMİ web sitesini bul.
 O sitenin kariyer, insan kaynakları veya iletişim sayfasına bak ve başvuru/İK
@@ -91,20 +122,31 @@ Yanıtı SADECE şu JSON formatında ver, başka açıklama ekleme:
             match = re.search(r'\{.*\}', text, re.DOTALL)
             if not match:
                 logger.info(f"[{company_name}] Gemini yanıtında JSON bulunamadı.")
-                return ""
+                return "", ""
 
             data = json.loads(match.group())
             email = (data.get("email") or "").strip().lower()
+            source_url = (data.get("source_url") or "").strip()
             invalid_extensions = ("png", "jpg", "jpeg", "gif", "w3.org", "sentry.io", "example.com", "google.com")
-            if email and cls.EMAIL_REGEX.fullmatch(email) and not email.endswith(invalid_extensions):
-                logger.info(f"[{company_name}] Şirket sitesinden e-posta bulundu: {email} (kaynak: {data.get('source_url')})")
-                return email
+            if not (email and cls.EMAIL_REGEX.fullmatch(email) and not email.endswith(invalid_extensions)):
+                logger.info(f"[{company_name}] Şirket sitesinde geçerli bir e-posta bulunamadı.")
+                return "", ""
 
-            logger.info(f"[{company_name}] Şirket sitesinde geçerli bir e-posta bulunamadı.")
-            return ""
+            if source_url:
+                email_core = cls._domain_core(email.split("@")[-1])
+                site_core = cls._domain_core(source_url)
+                if email_core != site_core:
+                    logger.warning(
+                        f"[{company_name}] Alan adı uyuşmazlığı — e-posta '{email}' (çekirdek: {email_core}) "
+                        f"ile kaynak site '{source_url}' (çekirdek: {site_core}) örtüşmüyor, reddedildi."
+                    )
+                    return "", ""
+
+            logger.info(f"[{company_name}] Şirket sitesinden e-posta bulundu: {email} (kaynak: {source_url})")
+            return email, source_url
         except Exception as e:
-            logger.error(f"[{company_name}] Beklenmeyen hata (hunt_email): {e}")
-            return ""
+            logger.error(f"[{company_name}] Beklenmeyen hata (hunt_email_with_source): {e}")
+            return "", ""
 
     @staticmethod
     def _safe_attachment_filename(cv_path: str, preferred_name: Optional[str] = None) -> str:

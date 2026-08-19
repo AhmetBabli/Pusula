@@ -36,6 +36,11 @@ class CustomQARequest(BaseModel):
 class SendFollowupRequest(BaseModel):
     body: str = Field(..., min_length=10)
 
+class OutcomeRequest(BaseModel):
+    # Kullanıcının bildirdiği gerçek sonuç — CV performans analitiğini ve
+    # takip nudge'ını gerçek anlamlı veriye kavuşturur.
+    outcome: str = Field(..., pattern="^(interview|offer|rejected)$")
+
 # GET / listelemesi için alt şemalar
 class JobSummary(BaseModel):
     id: int
@@ -59,6 +64,7 @@ class ApplicationOut(BaseModel):
     submitted_at: Optional[datetime]
     contact_email: Optional[str] = None
     contact_email_source: Optional[str] = None
+    contact_email_source_url: Optional[str] = None
     send_status: Optional[str] = None
     send_error: Optional[str] = None
     qa_answers: Optional[List[dict]] = None
@@ -124,6 +130,7 @@ def list_applications(
             "submitted_at": app.submitted_at,
             "contact_email": app.contact_email,
             "contact_email_source": app.contact_email_source,
+            "contact_email_source_url": app.contact_email_source_url,
             "send_status": app.send_status,
             "send_error": app.send_error,
             "qa_answers": app.qa_answers,
@@ -174,7 +181,7 @@ async def prepare_application(
     # çalıştırılsaydı kullanıcı ikisinin toplam süresi kadar beklerdi.
     # Not: Bu senkron bekliyor (API'yi bloklar), ancak kullanıcı direkt sonucu
     # görüp onaylayacağı için burada BackgroundTasks yerine bekletmek kabul edilebilir.
-    letter_content, (contact_email, contact_email_source) = await asyncio.gather(
+    letter_content, (contact_email, contact_email_source, contact_email_source_url) = await asyncio.gather(
         generate_cover_letter(
             job_title=job.title,
             company_name=job.company,
@@ -204,6 +211,7 @@ async def prepare_application(
         status="awaiting_approval",
         contact_email=contact_email or None,
         contact_email_source=contact_email_source or None,
+        contact_email_source_url=contact_email_source_url or None,
     )
     db.add(application)
     db.commit()
@@ -217,6 +225,7 @@ async def prepare_application(
         "cover_letter": letter_content,
         "contact_email": application.contact_email,
         "contact_email_source": application.contact_email_source,
+        "contact_email_source_url": application.contact_email_source_url,
         "message": "Başvuru hazır! Onayınızı bekliyorum. 🎯",
     }
 
@@ -522,3 +531,28 @@ def mark_responded(
     db.commit()
 
     return {"response_at": app.response_at.isoformat()}
+
+
+@router.patch("/{app_id}/outcome")
+def update_outcome(
+    app_id: int,
+    req: OutcomeRequest,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Kullanıcının gerçek başvuru sonucunu (mülakat/teklif/red) kaydeder.
+    Bu, CV varyant performans analitiğini eşleşme skoru gibi zayıf bir
+    vekil yerine gerçek sonuçlara dayandırır, ve bir yanıt geldiğini
+    ima ettiği için takip nudge'ını da otomatik susturur (response_at)."""
+    app = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Başvuru bulunamadı")
+    if app.status not in ("submitted", "interview", "offer"):
+        raise HTTPException(status_code=400, detail="Sonuç sadece gönderilmiş bir başvuru için işaretlenebilir.")
+
+    app.status = req.outcome
+    if app.response_at is None:
+        app.response_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"status": app.status, "response_at": app.response_at.isoformat()}

@@ -31,6 +31,9 @@ class Application(Base):
     # E-posta ile onaylı gönderim: hedef adres, kaynağı ve gönderim durumu
     contact_email = Column(String(300), nullable=True)
     contact_email_source = Column(String(20), nullable=True)  # job_posting | web_search | manual
+    # Tahmine dayalı (company_site) kaynaklarda: kullanıcının onaydan önce
+    # tıklayıp "gerçekten şirketin resmi sitesi mi" diye doğrulayabileceği link.
+    contact_email_source_url = Column(String(500), nullable=True)
     send_status = Column(String(20), default="not_applicable")  # not_applicable | pending | sent | failed
     send_error = Column(Text, nullable=True)
 

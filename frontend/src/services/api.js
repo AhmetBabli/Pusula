@@ -219,5 +219,11 @@ export const markResponded = (app_id) => request(`/applications/${app_id}/mark-r
   method: 'POST',
 });
 
+// ── Gerçek Sonuç Takibi (mülakat/teklif/red) ──
+export const updateApplicationOutcome = (app_id, outcome) => request(`/applications/${app_id}/outcome`, {
+  method: 'PATCH',
+  body: { outcome },
+});
+
 // ── DELETE Istekleri ──
 export const deleteCV = (id) => request(`/cvs/${id}`, { method: 'DELETE' });

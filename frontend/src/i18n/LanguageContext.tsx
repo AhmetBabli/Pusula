@@ -138,6 +138,14 @@ const translations: Translations = {
   applications_followup_loading: { tr: 'Hazırlanıyor...', en: 'Preparing...' },
   applications_followup_error: { tr: 'İşlem başarısız oldu, tekrar dene.', en: 'Something went wrong, try again.' },
   applications_followup_sent_confirm: { tr: 'Takip e-postası gönderildi. ✅', en: 'Follow-up email sent. ✅' },
+  applications_source_view_link: { tr: 'Kaynağı Gör', en: 'View Source' },
+  applications_outcome_title: { tr: 'Bu başvurudan haber aldın mı?', en: 'Heard back on this one?' },
+  applications_outcome_interview: { tr: 'Mülakat Aldım', en: 'Got an Interview' },
+  applications_outcome_offer: { tr: 'Teklif Aldım', en: 'Got an Offer' },
+  applications_outcome_rejected: { tr: 'Reddedildi', en: 'Rejected' },
+  applications_status_interview: { tr: 'Mülakat', en: 'Interview' },
+  applications_status_offer: { tr: 'Teklif', en: 'Offer' },
+  applications_status_rejected: { tr: 'Reddedildi', en: 'Rejected' },
 
   // ── Events (Etkinlikler) ──
   events_title: { tr: 'Etkinlikler', en: 'Events' },
@@ -161,6 +169,8 @@ const translations: Translations = {
   cv_others_title: { tr: 'Diğer CV\'ler', en: 'Other CVs' },
   cv_performance_title: { tr: 'CV Türüne Göre Performans', en: 'Performance by CV Type' },
   cv_performance_applications: { tr: '{count} başvuru', en: '{count} applications' },
+  cv_performance_interviews: { tr: '{count} mülakat', en: '{count} interviews' },
+  cv_performance_offers: { tr: '{count} teklif', en: '{count} offers' },
   cv_ai_generated_badge: { tr: 'Yapay Zeka ile Oluşturuldu', en: 'AI Generated' },
   cv_pdf: { tr: 'PDF', en: 'PDF' },
   cv_text: { tr: 'Metin', en: 'Text' },

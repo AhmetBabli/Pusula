@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users, Award, CalendarCheck } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 function CopyButton({ text, label }) {
@@ -263,7 +263,60 @@ function FollowupBox({ appId, onDraft, onSend, onMarkResponded, labels }) {
   );
 }
 
-function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnswerQuestions, onFindReferrals, onDraftFollowup, onSendFollowup, onMarkResponded }) {
+function OutcomeButtons({ appId, currentStatus, onUpdateOutcome, labels }) {
+  const [loading, setLoading] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleClick = async (outcome) => {
+    setLoading(outcome);
+    setError(null);
+    try {
+      await onUpdateOutcome(appId, outcome);
+    } catch (err) {
+      setError(err.message || labels.error);
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // "interview" durumundayken tekrar "Mülakat Aldım" göstermenin anlamı yok —
+  // o noktadan sonra sadece ileri (teklif) veya olumsuz (red) sonuç sorulur.
+  const options = currentStatus === 'interview'
+    ? [{ key: 'offer', label: labels.offer, icon: Award }, { key: 'rejected', label: labels.rejected, icon: XCircle }]
+    : [{ key: 'interview', label: labels.interview, icon: CalendarCheck }, { key: 'offer', label: labels.offer, icon: Award }, { key: 'rejected', label: labels.rejected, icon: XCircle }];
+
+  return (
+    <div className="flex flex-col gap-2 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
+      <span className="text-xs font-label font-semibold text-on-surface-variant">{labels.title}</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const Icon = opt.icon;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => handleClick(opt.key)}
+              disabled={loading !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-container border border-outline-variant/15 text-on-surface text-xs font-label hover:bg-surface-container-high active:scale-[0.97] disabled:opacity-50 transition-all"
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {loading === opt.key ? labels.loading : opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {error && <span className="text-xs text-error">{error}</span>}
+    </div>
+  );
+}
+
+const OUTCOME_STATUS_STYLE = {
+  interview: { tone: 'bg-primary/10 text-primary border-primary/20', icon: CalendarCheck },
+  offer: { tone: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20', icon: Award },
+  rejected: { tone: 'bg-red-500/10 text-red-500 border-red-500/20', icon: XCircle },
+};
+
+function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnswerQuestions, onFindReferrals, onDraftFollowup, onSendFollowup, onMarkResponded, onUpdateOutcome }) {
   const { t, language } = useLanguage();
   const copyLabel = { copy: t('applications_copy'), copied: t('applications_copied') };
   const customQaLabels = {
@@ -296,6 +349,14 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
     error: t('applications_followup_error'),
     sentConfirm: t('applications_followup_sent_confirm'),
   };
+  const outcomeLabels = {
+    title: t('applications_outcome_title'),
+    interview: t('applications_outcome_interview'),
+    offer: t('applications_outcome_offer'),
+    rejected: t('applications_outcome_rejected'),
+    loading: t('applications_followup_loading'),
+    error: t('applications_followup_error'),
+  };
 
   const EMAIL_SOURCE_LABEL = {
     job_posting: { text: t('applications_source_job_posting'), tone: 'text-emerald-500' },
@@ -310,6 +371,11 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
     { key: 'approved', label: t('applications_status_approved'), icon: CheckCircle },
     { key: 'submitted', label: t('applications_status_submitted'), icon: Send },
   ];
+  const OUTCOME_FILTER_OPTIONS = [
+    { key: 'interview', label: t('applications_status_interview') },
+    { key: 'offer', label: t('applications_status_offer') },
+    { key: 'rejected', label: t('applications_status_rejected') },
+  ];
 
   const [selectedApp, setSelectedApp] = useState(null);
   const [filter, setFilter] = useState('');
@@ -322,7 +388,13 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
     return app.status === filter;
   });
 
-  const getStatusIndex = (status) => STATUS_FLOW.findIndex(s => s.key === status);
+  // interview/offer/rejected, gönderim SÜRECİNİN kendisi tamamlandıktan sonra
+  // gelen dallanan sonuçlardır — çizgisel zaman çizelgesinde "submitted"ın
+  // devamı gibi (tamamen dolu) gösterilir, ayrı bir adım değil.
+  const getStatusIndex = (status) =>
+    ['interview', 'offer', 'rejected'].includes(status)
+      ? STATUS_FLOW.length - 1
+      : STATUS_FLOW.findIndex(s => s.key === status);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -365,6 +437,9 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
           >
             <option value="" className="bg-surface-container">{t('applications_filter_all')}</option>
             {STATUS_FLOW.map(s => (
+              <option key={s.key} value={s.key} className="bg-surface-container">{s.label}</option>
+            ))}
+            {OUTCOME_FILTER_OPTIONS.map(s => (
               <option key={s.key} value={s.key} className="bg-surface-container">{s.label}</option>
             ))}
           </select>
@@ -411,7 +486,17 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <h4 className="text-xl font-headline font-medium text-on-surface mb-1">{app.job?.title || t('applications_untitled_job')}</h4>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-xl font-headline font-medium text-on-surface">{app.job?.title || t('applications_untitled_job')}</h4>
+                          {OUTCOME_STATUS_STYLE[app.status] && (() => {
+                            const OutcomeIcon = OUTCOME_STATUS_STYLE[app.status].icon;
+                            return (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-label font-semibold border ${OUTCOME_STATUS_STYLE[app.status].tone}`}>
+                                <OutcomeIcon className="w-3 h-3" /> {t(`applications_status_${app.status}`)}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <span className="text-sm font-body text-on-surface-variant">{app.job?.company}</span>
                       </div>
 
@@ -461,9 +546,19 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
                           className="bg-surface-container-lowest border border-outline-variant/15 rounded-md px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
                         />
                         {app.contact_email_source && EMAIL_SOURCE_LABEL[app.contact_email_source] && (
-                          <span className={`text-xs font-label flex items-center gap-1 ${EMAIL_SOURCE_LABEL[app.contact_email_source].tone}`}>
-                            {(app.contact_email_source === 'web_search' || app.contact_email_source === 'company_site') && <AlertTriangle className="w-3.5 h-3.5" />}
+                          <span className={`text-xs font-label flex items-center gap-1.5 flex-wrap ${EMAIL_SOURCE_LABEL[app.contact_email_source].tone}`}>
+                            {(app.contact_email_source === 'web_search' || app.contact_email_source === 'company_site') && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
                             {EMAIL_SOURCE_LABEL[app.contact_email_source].text}
+                            {app.contact_email_source_url && (
+                              <a
+                                href={app.contact_email_source_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 underline underline-offset-2 hover:opacity-80"
+                              >
+                                {t('applications_source_view_link')} <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
                           </span>
                         )}
                       </div>
@@ -531,6 +626,16 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
                         onSend={onSendFollowup}
                         onMarkResponded={onMarkResponded}
                         labels={followupLabels}
+                      />
+                    )}
+
+                    {/* Gerçek sonuç takibi: gönderildikten (veya mülakat aşamasından) sonra */}
+                    {(app.status === 'submitted' || app.status === 'interview') && (
+                      <OutcomeButtons
+                        appId={app.id}
+                        currentStatus={app.status}
+                        onUpdateOutcome={onUpdateOutcome}
+                        labels={outcomeLabels}
                       />
                     )}
 

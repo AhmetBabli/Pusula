@@ -94,3 +94,33 @@ def test_cv_variant_performance_empty_when_no_cvs(client):
     res = client.get("/api/dashboard/stats", headers=headers)
     assert res.status_code == 200
     assert res.json()["cv_variant_performance"] == []
+
+
+def test_cv_variant_performance_counts_interviews_and_offers(client, db_session):
+    """Eşleşme skoru zayıf bir vekildi — gerçek sonuç (mülakat/teklif)
+    sayıldığında analitik gerçek anlam kazanır."""
+    headers = _auth_headers(client, "perf-outcome@example.com")
+    user = db_session.query(UserProfile).filter(UserProfile.email == "perf-outcome@example.com").first()
+
+    cv = CV(user_id=user.id, title="CV", variant_type="cyber", extracted_text="metin", is_default=True)
+    db_session.add(cv)
+    db_session.flush()
+
+    job1 = Job(source="kariyer_net", source_url="https://example.com/outcome-1", title="İlan 1", company="A")
+    job2 = Job(source="kariyer_net", source_url="https://example.com/outcome-2", title="İlan 2", company="B")
+    job3 = Job(source="kariyer_net", source_url="https://example.com/outcome-3", title="İlan 3", company="C")
+    db_session.add_all([job1, job2, job3])
+    db_session.flush()
+
+    db_session.add(Application(user_id=user.id, job_id=job1.id, cv_id=cv.id, status="submitted"))
+    db_session.add(Application(user_id=user.id, job_id=job2.id, cv_id=cv.id, status="interview"))
+    db_session.add(Application(user_id=user.id, job_id=job3.id, cv_id=cv.id, status="offer"))
+    db_session.commit()
+
+    res = client.get("/api/dashboard/stats", headers=headers)
+    perf = {row["variant_type"]: row for row in res.json()["cv_variant_performance"]}
+
+    assert perf["cyber"]["application_count"] == 3
+    # "offer" da bir mülakattan geçmiş demek, ikisi de mülakat sayısına dahil.
+    assert perf["cyber"]["interview_count"] == 2
+    assert perf["cyber"]["offer_count"] == 1

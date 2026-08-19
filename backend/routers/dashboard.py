@@ -80,6 +80,32 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: UserProfile
         .all()
     )
 
+    # Gerçek sonuçlar (mülakat/teklif) — eşleşme skoru gibi zayıf bir vekil
+    # yerine kullanıcının bizzat işaretlediği asıl veri. "offer" durumundaki
+    # bir başvuru zaten bir mülakattan geçmiş demektir, o yüzden ikisini de sayıyoruz.
+    interview_counts = dict(
+        db.query(CV.variant_type, func.count(Application.id))
+        .join(Application, Application.cv_id == CV.id)
+        .filter(
+            CV.user_id == current_user.id,
+            Application.user_id == current_user.id,
+            Application.status.in_(("interview", "offer")),
+        )
+        .group_by(CV.variant_type)
+        .all()
+    )
+    offer_counts = dict(
+        db.query(CV.variant_type, func.count(Application.id))
+        .join(Application, Application.cv_id == CV.id)
+        .filter(
+            CV.user_id == current_user.id,
+            Application.user_id == current_user.id,
+            Application.status == "offer",
+        )
+        .group_by(CV.variant_type)
+        .all()
+    )
+
     match_rows = (
         db.query(CV.variant_type, func.avg(JobUserState.match_score), func.count(JobUserState.id))
         .join(JobUserState, JobUserState.best_cv_id == CV.id)
@@ -96,6 +122,8 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: UserProfile
             application_count=app_counts.get(variant, 0),
             matched_job_count=match_map.get(variant, (0, 0))[1],
             avg_match_score=round(match_map.get(variant, (0, 0))[0] or 0, 1),
+            interview_count=interview_counts.get(variant, 0),
+            offer_count=offer_counts.get(variant, 0),
         )
         for variant, cv_count in cv_counts.items()
     ]

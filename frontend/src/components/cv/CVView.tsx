@@ -62,6 +62,16 @@ function VariantPerformancePanel({ data, t }) {
               <span className="text-xs font-body text-on-surface-variant w-28 shrink-0 text-right">
                 {t('cv_performance_applications').replace('{count}', row.application_count)}
               </span>
+              {row.interview_count > 0 && (
+                <span className="text-xs font-body text-primary w-24 shrink-0 text-right">
+                  {t('cv_performance_interviews').replace('{count}', row.interview_count)}
+                </span>
+              )}
+              {row.offer_count > 0 && (
+                <span className="text-xs font-body text-emerald-500 w-20 shrink-0 text-right">
+                  {t('cv_performance_offers').replace('{count}', row.offer_count)}
+                </span>
+              )}
             </div>
           );
         })}

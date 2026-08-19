@@ -365,6 +365,25 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
     manual: { text: t('applications_source_manual'), tone: 'text-on-surface-variant' },
   };
 
+  const renderEmailSourceBadge = (app) => (
+    app.contact_email_source && EMAIL_SOURCE_LABEL[app.contact_email_source] && (
+      <span className={`text-xs font-label flex items-center gap-1.5 flex-wrap ${EMAIL_SOURCE_LABEL[app.contact_email_source].tone}`}>
+        {(app.contact_email_source === 'web_search' || app.contact_email_source === 'company_site') && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
+        {EMAIL_SOURCE_LABEL[app.contact_email_source].text}
+        {app.contact_email_source_url && (
+          <a
+            href={app.contact_email_source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 underline underline-offset-2 hover:opacity-80"
+          >
+            {t('applications_source_view_link')} <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+      </span>
+    )
+  );
+
   const STATUS_FLOW = [
     { key: 'draft', label: t('applications_status_draft'), icon: FileText },
     { key: 'awaiting_approval', label: t('applications_status_awaiting'), icon: Clock },
@@ -545,30 +564,18 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
                           placeholder={t('applications_contact_email_placeholder')}
                           className="bg-surface-container-lowest border border-outline-variant/15 rounded-md px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
                         />
-                        {app.contact_email_source && EMAIL_SOURCE_LABEL[app.contact_email_source] && (
-                          <span className={`text-xs font-label flex items-center gap-1.5 flex-wrap ${EMAIL_SOURCE_LABEL[app.contact_email_source].tone}`}>
-                            {(app.contact_email_source === 'web_search' || app.contact_email_source === 'company_site') && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
-                            {EMAIL_SOURCE_LABEL[app.contact_email_source].text}
-                            {app.contact_email_source_url && (
-                              <a
-                                href={app.contact_email_source_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 underline underline-offset-2 hover:opacity-80"
-                              >
-                                {t('applications_source_view_link')} <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
-                          </span>
-                        )}
+                        {renderEmailSourceBadge(app)}
                       </div>
                     )}
 
                     {/* Onaylandı: hedef e-posta bilgisi + gönderim hatası */}
                     {app.status === 'approved' && app.contact_email && (
-                      <div className="text-sm font-body text-on-surface-variant flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 shrink-0" />
-                        <span>{t('applications_will_send_to')} <span className="text-on-surface font-medium">{app.contact_email}</span></span>
+                      <div className="flex flex-col gap-1">
+                        <div className="text-sm font-body text-on-surface-variant flex items-center gap-1.5">
+                          <Mail className="w-3.5 h-3.5 shrink-0" />
+                          <span>{t('applications_will_send_to')} <span className="text-on-surface font-medium">{app.contact_email}</span></span>
+                        </div>
+                        {renderEmailSourceBadge(app)}
                       </div>
                     )}
                     {app.status === 'approved' && app.send_status === 'failed' && (
@@ -580,9 +587,12 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
 
                     {/* Gönderildi: gerçek e-posta sonucu */}
                     {app.status === 'submitted' && app.send_status === 'sent' && (
-                      <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm">
-                        <CheckCircle className="w-4 h-4 shrink-0" />
-                        {language === 'tr' ? `${app.contact_email} adresine gönderildi.` : `Sent to ${app.contact_email}.`}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm">
+                          <CheckCircle className="w-4 h-4 shrink-0" />
+                          {language === 'tr' ? `${app.contact_email} adresine gönderildi.` : `Sent to ${app.contact_email}.`}
+                        </div>
+                        {renderEmailSourceBadge(app)}
                       </div>
                     )}
 

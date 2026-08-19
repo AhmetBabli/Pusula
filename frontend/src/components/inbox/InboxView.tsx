@@ -174,9 +174,21 @@ function InboxView({ items, isLoading, onSync, onMarkRead, onConvertToApplicatio
                           className="pt-4 mt-1 border-t border-outline-variant/10 flex flex-col gap-4"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <p className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
-                            {item.content_original || item.body_summary}
+                          <p className="text-sm font-body text-on-surface-variant leading-relaxed">
+                            {item.body_summary || item.content_original}
                           </p>
+
+                          {item.content_original && item.content_original !== item.body_summary && (
+                            <details className="group">
+                              <summary className="flex items-center gap-1.5 text-xs font-label text-on-surface-variant/70 hover:text-on-surface-variant cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+                                <ChevronDown className="w-3.5 h-3.5 transition-transform duration-200 group-open:rotate-180" />
+                                {t('inbox_view_full_email')}
+                              </summary>
+                              <div className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap text-xs font-body text-on-surface-variant/80 leading-relaxed bg-surface-container-lowest border border-outline-variant/10 rounded-md p-4">
+                                {item.content_original.slice(0, 5000)}
+                              </div>
+                            </details>
+                          )}
 
                           {item.item_type === 'job' && (
                             <div className="flex items-center gap-3">

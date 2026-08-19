@@ -2,14 +2,44 @@
 Kariyer Ajanı 2.0 — Interview Coach Agent
 Şirkete özel teknik/IK soru üretimi + cevap değerlendirmesi.
 """
+import asyncio
 import json
 import logging
 from typing import Literal, Optional
 from google import genai
 from google.genai import types
+from google.genai import errors as genai_errors
 from backend.config import settings
+from backend.exceptions import AIServiceError
 
 logger = logging.getLogger("InterviewCoachAgent")
+
+
+async def _generate_json_with_retry(client: genai.Client, prompt: str, log_prefix: str) -> dict | list:
+    """Gemini'nin geçici 'high demand' (503) yanıtları için kısa aralıklarla en
+    fazla 2 kez daha dener (bkz. gemini_client.py::_call_model_async_json —
+    aynı disiplin). Denemeler tükenince sessizce sahte bir sonuca düşmek
+    yerine AIServiceError fırlatır: çağıran uç bunu ya global exception
+    handler'a (temiz 503 yanıtı) ya da push_agent_event(..., 'failed', ...)'a
+    yönlendirip kullanıcıya gerçek durumu gösterir."""
+    for attempt in range(3):
+        try:
+            response = await client.aio.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
+            return json.loads(response.text)
+        except genai_errors.ServerError as e:
+            if attempt < 2:
+                logger.warning(f"[{log_prefix}] Gemini geçici olarak meşgul (deneme {attempt + 1}/3), tekrar deneniyor: {e}")
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            logger.error(f"[{log_prefix}] Gemini API sürekli meşgul, vazgeçildi: {e}")
+            raise AIServiceError(f"AI service temporarily unavailable: {e}")
+        except Exception as e:
+            logger.error(f"[{log_prefix}] Gemini API çağrısında hata: {type(e).__name__} - {e}")
+            raise AIServiceError(f"AI service error: {e}")
 
 # Şirket kültürü veritabanı — mülakat ağırlıkları
 COMPANY_PROFILES: dict[str, dict] = {
@@ -88,22 +118,10 @@ Her soru için şu JSON formatını kullan:
 
 SADECE JSON döndür, açıklama ekleme. {count} soru üret."""
 
-    try:
-        client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
-        response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        questions = json.loads(response.text)
-        logger.info(f"[InterviewCoach] {len(questions)} soru üretildi.")
-        return questions
-    except Exception as e:
-        logger.error(f"[InterviewCoach] Soru üretim hatası: {e}")
-        return [
-            {"id": 1, "question": f"{job_title} pozisyonu için kendinizi tanıtır mısınız?",
-             "type": "hr", "hint": "Deneyim, motivasyon, hedefler"}
-        ]
+    client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
+    questions = await _generate_json_with_retry(client, prompt, "InterviewCoach")
+    logger.info(f"[InterviewCoach] {len(questions)} soru üretildi.")
+    return questions
 
 
 async def evaluate_answer(
@@ -136,22 +154,7 @@ Cevabı değerlendir. JSON formatında döndür:
   "model_answer_hint": "<ideal cevabın içermesi gereken 1-2 anahtar nokta>"
 }}"""
 
-    try:
-        client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
-        response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        result = json.loads(response.text)
-        result["score"] = max(0, min(100, int(result.get("score", 50))))
-        return result
-    except Exception as e:
-        logger.error(f"[InterviewCoach] Cevap değerlendirme hatası: {e}")
-        return {
-            "score": 50,
-            "feedback": "Değerlendirme şu an yapılamıyor.",
-            "strengths": ["Cevap verildi"],
-            "improvements": ["Daha fazla detay eklenebilir"],
-            "model_answer_hint": "Tekrar deneyin.",
-        }
+    client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
+    result = await _generate_json_with_retry(client, prompt, "InterviewCoach")
+    result["score"] = max(0, min(100, int(result.get("score", 50))))
+    return result

@@ -25,8 +25,9 @@ import Header from './components/layout/Header';
 import Navigation from './components/layout/Navigation';
 import { useTaskStream } from './hooks/useTaskStream';
 import {
-  getDashboardStats, getJobs, getApplications, getEvents, getCVs, getInboxItems,
-  syncJobs, syncInbox, prepareApplication, approveApplication, submitApplication, answerCustomQuestions,
+  getDashboardStats, getJobs, getApplications, getEvents, updateEventStatus, getCVs, getInboxItems,
+  syncJobs, syncInbox, markInboxItemRead, convertInboxItemToJob,
+  prepareApplication, approveApplication, submitApplication, answerCustomQuestions,
   findReferrals, draftFollowup, sendFollowup, markResponded, updateApplicationOutcome,
   uploadCV, deleteCV, setDefaultCV, linkEmailAccount, getAccounts, prepareOutreach, sendOutreach,
   getProfile, getToken, logout as apiLogout,
@@ -259,6 +260,28 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateEventStatus = async (eventId: number, status: string) => {
+    await updateEventStatus(eventId, status);
+    await refreshEvents();
+  };
+
+  const handleMarkInboxRead = async (itemId: number) => {
+    try {
+      await markInboxItemRead(itemId);
+      await refreshInbox();
+    } catch (err) {
+      console.error('Mark inbox item read error:', err);
+    }
+  };
+
+  const handleConvertInboxToApplication = async (itemId: number) => {
+    const { job_id } = await convertInboxItemToJob(itemId);
+    await prepareApplication(job_id);
+    setTab('applications');
+    await refreshApplications();
+    await refreshInbox();
+  };
+
   const handleJobAction = async (action: string, jobId: number) => {
     if (action !== 'prepare') return;
     // Hata burada yutulmuyor — JobsView çağıran buton bunu yakalayıp
@@ -403,7 +426,7 @@ const App: React.FC = () => {
         onUpdateOutcome={handleUpdateOutcome}
       />
     ),
-    events: <EventsView events={events} isLoading={eventsLoading} />,
+    events: <EventsView events={events} isLoading={eventsLoading} onUpdateStatus={handleUpdateEventStatus} />,
     cv: (
       <CVView
         cvs={cvs}
@@ -414,7 +437,15 @@ const App: React.FC = () => {
         variantPerformance={dashboardStats?.cv_variant_performance || []}
       />
     ),
-    inbox: <InboxView items={inboxItems} isLoading={inboxLoading} onSync={handleSyncInbox} />,
+    inbox: (
+      <InboxView
+        items={inboxItems}
+        isLoading={inboxLoading}
+        onSync={handleSyncInbox}
+        onMarkRead={handleMarkInboxRead}
+        onConvertToApplication={handleConvertInboxToApplication}
+      />
+    ),
     profile: <ProfileView userProfile={userProfile} onSave={setUserProfile} onLogout={handleLogout} />,
     agents: (
       <div className="space-y-10">

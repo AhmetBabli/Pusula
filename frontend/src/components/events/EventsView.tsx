@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, MapPin, Clock, ExternalLink } from 'lucide-react';
+import { Calendar, MapPin, Clock, ExternalLink, Heart, BadgeCheck, CheckCircle2, X } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 const EVENT_TYPE_KEYS = {
@@ -11,7 +11,65 @@ const EVENT_TYPE_KEYS = {
   workshop: 'events_type_workshop',
 };
 
-function EventsView({ events, isLoading }) {
+// Bir durumdan sonra kullanıcının gidebileceği ileri adımlar — 'attended'/'skipped' uçlar (terminal).
+const NEXT_ACTIONS = {
+  found: ['interested', 'registered', 'skipped'],
+  interested: ['registered', 'skipped'],
+  registered: ['attended', 'skipped'],
+  attended: [],
+  skipped: [],
+};
+
+const STATUS_STYLE = {
+  interested: { icon: Heart, tone: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20' },
+  registered: { icon: BadgeCheck, tone: 'text-primary bg-primary-container/10 border-primary-container/20' },
+  attended: { icon: CheckCircle2, tone: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' },
+  skipped: { icon: X, tone: 'text-on-surface-variant bg-outline-variant/5 border-outline-variant/15' },
+};
+
+function EventStatusActions({ event, onUpdateStatus, t }) {
+  const [updating, setUpdating] = useState(null);
+  const nextActions = NEXT_ACTIONS[event.status] || [];
+
+  const handleClick = async (e, status) => {
+    e.stopPropagation();
+    if (!onUpdateStatus) return;
+    setUpdating(status);
+    try {
+      await onUpdateStatus(event.id, status);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  if (event.status && STATUS_STYLE[event.status]) {
+    const StatusIcon = STATUS_STYLE[event.status].icon;
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-label font-semibold border w-fit ${STATUS_STYLE[event.status].tone}`}>
+        <StatusIcon className="w-3 h-3" /> {t(`events_status_${event.status}`)}
+      </span>
+    );
+  }
+
+  if (!nextActions.length) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {nextActions.map((status) => (
+        <button
+          key={status}
+          onClick={(e) => handleClick(e, status)}
+          disabled={updating !== null}
+          className="px-2.5 py-1 rounded-md border border-outline-variant/15 bg-surface-container-lowest hover:bg-surface-container-high text-xs font-label text-on-surface-variant hover:text-on-surface active:scale-[0.96] transition-all duration-150 disabled:opacity-50"
+        >
+          {updating === status ? '...' : t(`events_status_${status}`)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EventsView({ events, isLoading, onUpdateStatus }) {
   const { t, language } = useLanguage();
   const eventTypeLabel = (eventType) => (eventType && EVENT_TYPE_KEYS[eventType] ? t(EVENT_TYPE_KEYS[eventType]) : eventType);
   const containerVariants = {
@@ -109,10 +167,21 @@ function EventsView({ events, isLoading }) {
                   </div>
 
                   {event.description && (
-                    <p className="text-sm font-body text-on-surface-variant leading-relaxed line-clamp-3 mb-6 flex-1">
+                    <p className="text-sm font-body text-on-surface-variant leading-relaxed line-clamp-3 mb-4 flex-1">
                       {event.description}
                     </p>
                   )}
+
+                  {event.relevance_reason && (
+                    <div className="flex items-start gap-1.5 mb-4 text-xs font-body text-on-surface-variant bg-surface-container-lowest border border-outline-variant/10 rounded-md px-3 py-2">
+                      <span className="font-label font-semibold text-primary shrink-0">{t('events_relevance_label')}</span>
+                      <span className="line-clamp-2">{event.relevance_reason}</span>
+                    </div>
+                  )}
+
+                  <div className="mb-4">
+                    <EventStatusActions event={event} onUpdateStatus={onUpdateStatus} t={t} />
+                  </div>
 
                   {event.url && (
                     <a

@@ -158,6 +158,12 @@ const translations: Translations = {
   events_empty_title: { tr: 'Henüz etkinlik bulunmuyor.', en: 'No events yet.' },
   events_empty_desc: { tr: 'Yaklaşan kariyer fuarları ve etkinlikler burada listelenecek.', en: 'Upcoming career fairs and events will be listed here.' },
   events_details_link: { tr: 'Etkinlik Detayları', en: 'Event Details' },
+  events_status_found: { tr: 'Yeni', en: 'New' },
+  events_status_interested: { tr: 'İlgileniyorum', en: 'Interested' },
+  events_status_registered: { tr: 'Kayıt Oldum', en: 'Registered' },
+  events_status_attended: { tr: 'Katıldım', en: 'Attended' },
+  events_status_skipped: { tr: 'Atla', en: 'Skip' },
+  events_relevance_label: { tr: 'Neden sana uygun?', en: 'Why this fits you' },
 
   // ── CV (Portföy) ──
   cv_title: { tr: 'Portföy', en: 'Portfolio' },
@@ -208,6 +214,12 @@ const translations: Translations = {
   inbox_type_career_fair: { tr: 'Kariyer Fuarı', en: 'Career fair' },
   inbox_type_course: { tr: 'Eğitim', en: 'Course' },
   inbox_type_update: { tr: 'Güncelleme', en: 'Update' },
+  inbox_convert_to_application: { tr: 'Başvuru Olarak Takip Et', en: 'Track as Application' },
+  inbox_converting: { tr: 'Hazırlanıyor...', en: 'Preparing...' },
+  inbox_already_tracked: { tr: 'Takibe Alındı', en: 'Tracked' },
+  inbox_convert_error: { tr: 'Başvuruya dönüştürülemedi.', en: 'Could not convert to an application.' },
+  inbox_view_full_email: { tr: 'Tam metni gör', en: 'View full email' },
+  inbox_hide_full_email: { tr: 'Gizle', en: 'Hide' },
 
   // ── AI Asistanları (Otomasyon) ──
   agents_title: { tr: 'Yapay Zeka Asistanları', en: 'AI Assistants' },

@@ -110,6 +110,10 @@ export const getCVs = () => request('/cvs/');
 export const getProfile = () => request('/users/profile');
 export const getAccounts = () => request('/inbox/accounts');
 export const getEvents = () => request('/events/');
+export const updateEventStatus = (event_id, status) => request(`/events/${event_id}/status`, {
+  method: 'PATCH',
+  body: { status },
+});
 export const getDashboardStats = () => request('/dashboard/stats');
 
 // Artık params objesi kullanıyoruz. status undefined ise URL bozulmaz.
@@ -121,6 +125,8 @@ export const getApplications = (status) => request('/applications/', {
 // syncJobs artık { task_id, status } döndürüyor — useTaskStream ile SSE takibi yap
 export const syncJobs = () => request('/jobs/sync', { method: 'POST' });
 export const syncInbox = () => request('/inbox/sync', { method: 'POST' });
+export const markInboxItemRead = (item_id) => request(`/inbox/items/${item_id}/read`, { method: 'PATCH' });
+export const convertInboxItemToJob = (item_id) => request(`/inbox/items/${item_id}/convert-to-job`, { method: 'POST' });
 export const linkEmailAccount = (email, app_password) => request('/inbox/accounts', {
   method: 'POST',
   body: { email, app_password }

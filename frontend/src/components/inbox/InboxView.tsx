@@ -1,10 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, MailOpen, Briefcase, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
+import { Mail, MailOpen, Briefcase, Calendar, AlertCircle, RefreshCw, ChevronDown, Send, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
-function InboxView({ items, isLoading, onSync }) {
+function InboxView({ items, isLoading, onSync, onMarkRead, onConvertToApplication }) {
   const { t, language } = useLanguage();
+  const [expandedId, setExpandedId] = useState(null);
+  const [convertingId, setConvertingId] = useState(null);
+  const [convertError, setConvertError] = useState(null);
+
+  const toggleExpand = (item) => {
+    const opening = expandedId !== item.id;
+    setExpandedId(opening ? item.id : null);
+    if (opening && !item.is_read) {
+      onMarkRead?.(item.id);
+    }
+  };
+
+  const handleConvert = async (e, item) => {
+    e.stopPropagation();
+    setConvertError(null);
+    setConvertingId(item.id);
+    try {
+      await onConvertToApplication?.(item.id);
+    } catch (err) {
+      setConvertError(item.id);
+    } finally {
+      setConvertingId(null);
+    }
+  };
 
   const getIcon = (type) => {
     switch (type) {
@@ -98,38 +122,89 @@ function InboxView({ items, isLoading, onSync }) {
             className="space-y-3"
           >
             <AnimatePresence>
-              {items.map(item => (
+              {items.map(item => {
+                const isExpanded = expandedId === item.id;
+                return (
                 <motion.div
                   key={item.id}
                   variants={itemVariants}
                   layout
-                  className={`group bg-surface-container hover:bg-surface-container-high border ${!item.is_read ? 'border-primary/30' : 'border-outline-variant/10'} hover:border-outline-variant/20 p-5 rounded-lg transition-all duration-150 flex flex-col md:flex-row gap-4 md:items-center cursor-pointer`}
+                  onClick={() => toggleExpand(item)}
+                  className={`group bg-surface-container hover:bg-surface-container-high border ${!item.is_read ? 'border-primary/30' : 'border-outline-variant/10'} hover:border-outline-variant/20 p-5 rounded-lg transition-all duration-150 flex flex-col gap-4 cursor-pointer`}
                 >
-                  <div className={`w-11 h-11 rounded-md flex items-center justify-center shrink-0 ${!item.is_read ? 'bg-primary border border-primary text-white' : 'bg-surface-container-lowest border border-outline-variant/10 text-on-surface-variant'}`}>
-                    {getIcon(item.item_type)}
-                  </div>
+                  <div className="flex flex-col md:flex-row gap-4 md:items-center">
+                    <div className={`w-11 h-11 rounded-md flex items-center justify-center shrink-0 ${!item.is_read ? 'bg-primary border border-primary text-white' : 'bg-surface-container-lowest border border-outline-variant/10 text-on-surface-variant'}`}>
+                      {getIcon(item.item_type)}
+                    </div>
 
-                  <div className="flex-1 flex flex-col gap-1 min-w-0">
-                    <div className="flex items-center gap-3">
-                      <h4 className={`text-base font-headline font-medium truncate ${!item.is_read ? 'text-on-surface' : 'text-on-surface/80'}`}>
-                        {item.title}
-                      </h4>
-                      <span className="px-2 py-0.5 rounded bg-outline-variant/5 text-[10px] font-label text-on-surface-variant tracking-wider shrink-0">
-                        {getTypeLabel(item.item_type)}
+                    <div className="flex-1 flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-3">
+                        <h4 className={`text-base font-headline font-medium truncate ${!item.is_read ? 'text-on-surface' : 'text-on-surface/80'}`}>
+                          {item.title}
+                        </h4>
+                        <span className="px-2 py-0.5 rounded bg-outline-variant/5 text-[10px] font-label text-on-surface-variant tracking-wider shrink-0">
+                          {getTypeLabel(item.item_type)}
+                        </span>
+                      </div>
+
+                      <div className="text-sm font-body text-on-surface-variant truncate">
+                        <span className="font-medium text-on-surface/60 mr-2">{item.sender}</span>
+                        {item.body_summary}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
+                      <span className="text-xs tabular-nums text-on-surface-variant/60">
+                        {item.received_at ? new Date(item.received_at).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }) : ''}
                       </span>
-                    </div>
-
-                    <div className="text-sm font-body text-on-surface-variant truncate">
-                      <span className="font-medium text-on-surface/60 mr-2">{item.sender}</span>
-                      {item.body_summary}
+                      <ChevronDown className={`w-4 h-4 text-on-surface-variant/50 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                   </div>
 
-                  <div className="text-xs tabular-nums text-on-surface-variant/60 shrink-0 self-start md:self-center mt-2 md:mt-0">
-                    {item.received_at ? new Date(item.received_at).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }) : ''}
-                  </div>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div
+                          className="pt-4 mt-1 border-t border-outline-variant/10 flex flex-col gap-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <p className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
+                            {item.content_original || item.body_summary}
+                          </p>
+
+                          {item.item_type === 'job' && (
+                            <div className="flex items-center gap-3">
+                              {item.is_applied ? (
+                                <span className="inline-flex items-center gap-1.5 text-sm font-label text-emerald-500">
+                                  <CheckCircle2 className="w-4 h-4" /> {t('inbox_already_tracked')}
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={(e) => handleConvert(e, item)}
+                                  disabled={convertingId === item.id}
+                                  className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary-container hover:bg-blue-700 active:scale-[0.97] text-white text-sm font-label transition-all duration-150 disabled:opacity-50"
+                                >
+                                  <Send className="w-4 h-4" />
+                                  {convertingId === item.id ? t('inbox_converting') : t('inbox_convert_to_application')}
+                                </button>
+                              )}
+                              {convertError === item.id && (
+                                <span className="text-xs text-error">{t('inbox_convert_error')}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
-              ))}
+              );})}
             </AnimatePresence>
           </motion.div>
         )}

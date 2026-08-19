@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 import asyncio
 import logging
+import re
 
 from backend.database import get_db, SessionLocal # SessionLocal arka plan için eklendi
 from backend.models.inbox import EmailAccount, InboxItem
+from backend.models.job import Job
 from backend.models.user import UserProfile
 from backend.automation.gmail_service import GmailService
 from backend.automation.outreach_agent import OutreachAgent
@@ -37,8 +39,10 @@ class InboxItemOut(BaseModel):
     title: str
     sender: str
     body_summary: str
+    content_original: Optional[str] = None
     received_at: datetime
     is_read: bool
+    is_applied: bool
 
     class Config:
         from_attributes = True
@@ -86,6 +90,61 @@ def get_inbox_items(db: Session = Depends(get_db), current_user: UserProfile = D
         .all()
     )
     return items
+
+def _get_own_item_or_404(db: Session, item_id: int, current_user: UserProfile) -> InboxItem:
+    item = (
+        db.query(InboxItem)
+        .join(EmailAccount, InboxItem.account_id == EmailAccount.id)
+        .filter(InboxItem.id == item_id, EmailAccount.user_id == current_user.id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Öğe bulunamadı")
+    return item
+
+def _company_from_sender(sender: str) -> str:
+    """'Ad Soyad <mail@sirket.com>' → 'Ad Soyad'; sadece e-posta ise domain'in ilk parçası."""
+    named = re.match(r'^\s*"?([^"<]+?)"?\s*<', sender)
+    if named and named.group(1).strip():
+        return named.group(1).strip()
+    domain = re.search(r'@([\w.-]+)', sender)
+    if domain:
+        return domain.group(1).split('.')[0].capitalize()
+    return sender.strip() or "Bilinmeyen Gönderen"
+
+@router.patch("/items/{item_id}/read", response_model=InboxItemOut)
+def mark_item_read(item_id: int, db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
+    """Öğeyi okundu olarak işaretle."""
+    item = _get_own_item_or_404(db, item_id, current_user)
+    item.is_read = True
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.post("/items/{item_id}/convert-to-job")
+def convert_item_to_job(item_id: int, db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
+    """Gelen kutusunda tespit edilen bir iş fırsatını takip edilebilir bir
+    ilana dönüştürür. Gerçek bir ilan sayfası yok — bu yüzden source_url
+    sentetik ama benzersiz (`inbox://item/{id}`), gerçek bir link gibi
+    sunulmuyor. Dönüş değeri job_id: frontend bunu doğrudan mevcut
+    POST /applications/prepare akışına yollayarak aynı mektup+e-posta
+    keşfi pipeline'ını sıfırdan koda gerek kalmadan yeniden kullanıyor."""
+    item = _get_own_item_or_404(db, item_id, current_user)
+    if item.item_type != "job":
+        raise HTTPException(status_code=400, detail="Sadece 'iş fırsatı' tipi öğeler başvuruya dönüştürülebilir.")
+
+    job = Job(
+        source="gmail_inbox",
+        source_url=f"inbox://item/{item.id}",
+        title=item.title,
+        company=_company_from_sender(item.sender),
+        description=item.content_original or item.body_summary or "",
+    )
+    db.add(job)
+    item.is_applied = True
+    db.commit()
+    db.refresh(job)
+    return {"job_id": job.id}
 
 @router.post("/sync", status_code=202)
 async def sync_inbox(

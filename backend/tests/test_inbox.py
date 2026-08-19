@@ -110,6 +110,92 @@ def test_get_inbox_items_only_returns_own(client, db_session):
     assert items_b == []
 
 
+def test_mark_item_read_updates_flag(client, db_session):
+    headers = _auth_headers(client, "inbox-read@example.com")
+    account = _seed_account(db_session, "inbox-read@example.com", account_email="read@gmail.com")
+    item = InboxItem(
+        account_id=account.id,
+        uid="uid-read",
+        item_type="job",
+        title="Okunmamış İlan",
+        sender="ik@sirket.com",
+        body_summary="Özet",
+        received_at=datetime.now(timezone.utc),
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    res = client.patch(f"/api/inbox/items/{item.id}/read", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["is_read"] is True
+
+
+def test_mark_item_read_404_for_other_users_item(client, db_session):
+    headers_owner = _auth_headers(client, "inbox-read-owner@example.com")
+    headers_other = _auth_headers(client, "inbox-read-other@example.com")
+    account = _seed_account(db_session, "inbox-read-owner@example.com", account_email="read-owner@gmail.com")
+    item = InboxItem(
+        account_id=account.id, uid="uid-read2", item_type="job", title="Başkasının Öğesi",
+        sender="ik@sirket.com", body_summary="", received_at=datetime.now(timezone.utc),
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    res = client.patch(f"/api/inbox/items/{item.id}/read", headers=headers_other)
+    assert res.status_code == 404
+
+
+def test_convert_job_item_creates_job_and_marks_applied(client, db_session):
+    from backend.models.job import Job
+
+    headers = _auth_headers(client, "inbox-convert@example.com")
+    account = _seed_account(db_session, "inbox-convert@example.com", account_email="convert@gmail.com")
+    item = InboxItem(
+        account_id=account.id,
+        uid="uid-convert",
+        item_type="job",
+        title="Veri Analisti Stajyeri",
+        sender="İnsan Kaynakları <ik@ornek-sirket.com>",
+        body_summary="Kısa özet",
+        content_original="Tam e-posta metni burada.",
+        received_at=datetime.now(timezone.utc),
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    res = client.post(f"/api/inbox/items/{item.id}/convert-to-job", headers=headers)
+    assert res.status_code == 200, res.text
+    job_id = res.json()["job_id"]
+
+    job = db_session.query(Job).filter(Job.id == job_id).first()
+    assert job is not None
+    assert job.title == "Veri Analisti Stajyeri"
+    assert job.company == "İnsan Kaynakları"
+    assert job.description == "Tam e-posta metni burada."
+    assert job.source_url == f"inbox://item/{item.id}"
+
+    db_session.refresh(item)
+    assert item.is_applied is True
+
+
+def test_convert_non_job_item_rejected(client, db_session):
+    headers = _auth_headers(client, "inbox-convert-bad@example.com")
+    account = _seed_account(db_session, "inbox-convert-bad@example.com", account_email="convert-bad@gmail.com")
+    item = InboxItem(
+        account_id=account.id, uid="uid-convert-bad", item_type="event", title="Bir Etkinlik",
+        sender="etkinlik@ornek.com", body_summary="", received_at=datetime.now(timezone.utc),
+    )
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+
+    res = client.post(f"/api/inbox/items/{item.id}/convert-to-job", headers=headers)
+    assert res.status_code == 400
+
+
 def test_sync_requires_linked_account(client):
     headers = _auth_headers(client, "inbox-sync-none@example.com")
     res = client.post("/api/inbox/sync", headers=headers)

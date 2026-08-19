@@ -86,6 +86,59 @@ Yanıtı SADECE şu JSON dizisi formatında ver, başka açıklama ekleme:
     return jobs
 
 
+async def search_events_live(
+    query: str,
+    location: str = "Türkiye",
+    user_context: str = "",
+    api_key: Optional[str] = None,
+) -> list[dict]:
+    """
+    Gemini Grounding ile gerçek zamanlı kariyer etkinliği (kariyer fuarı,
+    hackathon, seminer, networking, atölye) arar. Döndürülen liste
+    backend.routers.events.EventCreate uyumlu dict'lerdir + relevance_score/
+    relevance_reason (adayın profiline göre AI'nın uygunluk değerlendirmesi).
+    """
+    prompt = f"""
+Sen bir kariyer danışmanısın. Google'ı kullanarak şu an için güncel/yaklaşan kariyer
+etkinliklerini (kariyer fuarı, hackathon, seminer, networking etkinliği, atölye) bul.
+
+Arama sorgusu: "{query}" — Lokasyon: {location}
+
+{user_context}
+
+Bulduğun her etkinlik için şu bilgileri çıkar:
+- title: Etkinlik adı
+- organizer: Düzenleyen kurum/şirket
+- description: Kısa açıklama (max 300 karakter)
+- event_type: "hackathon", "career_fair", "seminar", "networking" veya "workshop"
+- location: Yer (fiziksel adres veya "Online")
+- is_online: true/false
+- is_free: true/false
+- event_date: "YYYY-MM-DD" formatında (biliniyorsa, yoksa null)
+- source_url: Etkinliğin kayıt/detay sayfası URL'si
+- relevance_score: Yukarıdaki aday profiline göre 0-100 arası uygunluk puanı
+- relevance_reason: Bu etkinliğin adaya neden uygun olduğunu anlatan tek cümle (Türkçe)
+
+Yanıtı SADECE şu JSON dizisi formatında ver, başka açıklama ekleme:
+[{{"title":"...","organizer":"...","description":"...","event_type":"...","location":"...","is_online":false,"is_free":true,"event_date":"...","source_url":"...","relevance_score":0,"relevance_reason":"..."}}]
+"""
+    client = _get_client(api_key)
+    response = await _generate_with_retry(client, prompt, "WebSearch")
+
+    import json, re
+    text = (response.text or "").strip()
+    match = re.search(r'\[.*\]', text, re.DOTALL)
+    if not match:
+        logger.warning(f"[WebSearch] Etkinlik yanıtında JSON dizisi bulunamadı: {text[:200]!r}")
+        return []
+
+    events = json.loads(match.group())
+    for e in events:
+        e.setdefault("source", "gemini_grounding")
+    logger.info(f"[WebSearch] Gemini Grounding → {len(events)} etkinlik bulundu.")
+    return events
+
+
 async def get_company_news(company_name: str, api_key: Optional[str] = None) -> list[dict]:
     """Şirket hakkında son haberleri çeker."""
     prompt = f"""

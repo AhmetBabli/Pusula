@@ -16,10 +16,12 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.user import UserProfile
 from backend.models.job import Job
+from backend.models.event import Event
 from backend.models.cv import CV
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.routers.ws import push_agent_event
+from backend.routers.events import EventCreate
 
 router = APIRouter(prefix="/agents", tags=["Ajan Merkezi"])
 logger = logging.getLogger(__name__)
@@ -28,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=2, description="'İstanbul React Staj' gibi")
+    location: str = Field(default="Türkiye")
+    session_id: str = Field(..., description="WebSocket session ID")
+
+class EventSearchRequest(BaseModel):
+    query: str = Field(..., min_length=2, description="'İstanbul kariyer fuarı' gibi")
     location: str = Field(default="Türkiye")
     session_id: str = Field(..., description="WebSocket session ID")
 
@@ -103,6 +110,54 @@ async def _run_web_search(session_id: str, query: str, location: str, db_user_id
     except Exception as e:
         logger.error(f"[Agents] web_search hatası: {e}")
         await push_agent_event(session_id, "web_search", "failed", str(e), 0)
+
+
+async def _run_event_search(session_id: str, query: str, location: str, db_user_id: int):
+    from backend.ai.web_search_agent import search_events_live
+    from backend.database import SessionLocal
+
+    await push_agent_event(session_id, "event_search", "running", "Gemini Grounding aktif...", 10)
+    try:
+        with SessionLocal() as db:
+            requester = db.query(UserProfile).filter(UserProfile.id == db_user_id).first()
+            requester_api_key = requester.gemini_api_key if requester else None
+            user_context = (
+                f"Aday Profili: {requester.university or ''} — {requester.department or ''}. "
+                f"Beceriler: {', '.join(requester.skills or [])}."
+                if requester else ""
+            )
+
+        events = await search_events_live(query, location, user_context=user_context, api_key=requester_api_key)
+        await push_agent_event(session_id, "event_search", "running", f"{len(events)} etkinlik bulundu, DB'ye kaydediliyor...", 70)
+
+        saved = 0
+        with SessionLocal() as db:
+            for raw in events:
+                source_url = (raw.get("source_url") or "").strip()
+                if not source_url:
+                    continue  # source_url DB'de unique+NOT NULL — güvenilir dedup için linksiz sonuçları atla
+                try:
+                    existing = db.query(Event).filter(Event.source_url == source_url).first()
+                    if existing:
+                        continue
+                    validated = EventCreate.model_validate({**raw, "source": raw.get("source", "gemini_grounding")})
+                    event = Event(**validated.model_dump())
+                    event.relevance_score = raw.get("relevance_score")
+                    event.relevance_reason = raw.get("relevance_reason")
+                    db.add(event)
+                    saved += 1
+                except Exception:
+                    continue
+            db.commit()
+
+        await push_agent_event(
+            session_id, "event_search", "done",
+            f"Tamamlandı: {saved} yeni etkinlik kaydedildi.", 100,
+            data={"saved_count": saved, "found_count": len(events)}
+        )
+    except Exception as e:
+        logger.error(f"[Agents] event_search hatası: {e}")
+        await push_agent_event(session_id, "event_search", "failed", str(e), 0)
 
 
 async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[int], extra_exp: str):
@@ -256,6 +311,17 @@ async def search_jobs(
 ):
     """Gemini Grounding ile canlı iş ilanı arama."""
     background_tasks.add_task(_run_web_search, req.session_id, req.query, req.location, current_user.id)
+    return {"status": "started", "session_id": req.session_id}
+
+
+@router.post("/search-events", status_code=202)
+async def search_events(
+    req: EventSearchRequest,
+    background_tasks: BackgroundTasks,
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Gemini Grounding ile canlı kariyer etkinliği arama."""
+    background_tasks.add_task(_run_event_search, req.session_id, req.query, req.location, current_user.id)
     return {"status": "started", "session_id": req.session_id}
 
 

@@ -286,8 +286,21 @@ async def generate_cover_letter(
 ) -> str:
     """Şirkete özel motivasyon mektubu üret."""
     prompt = f"""Sen profesyonel bir kariyer danışmanısın. Aşağıdaki bilgilere göre Türkçe bir motivasyon mektubu yaz.
+
+KRİTİK KURAL — somutluk: "yetkinliklerimi geliştirmek istiyorum", "hedeflerinizle örtüşüyor" gibi
+hiçbir şey söylemeyen genel-geçer cümleler YASAK. Onun yerine:
+1. İlan metnindeki somut gereksinimleri (teknoloji, araç, sertifika, metodoloji ne geçiyorsa) tespit et.
+2. Adayın CV'sinde bunlara karşılık gelen SOMUT bir şey varsa (bir proje adı, kullandığı bir araç/dil,
+   aldığı bir sertifika, katıldığı bir yarışma/staj) açıkça adıyla anıp 1 cümlede nasıl kullandığını anlat.
+3. CV'de hiçbir somut karşılık yoksa, boşluğu doldurmak için uydurma — bunun yerine adayın ilgili
+   bölüm/derslerinden veya genel teknik yöneliminden dürüstçe bahset, ama yine spesifik ol
+   ("X dersinde Y konusuna odaklandım" gibi), havada kalan sıfatlara sığınma.
+4. Pozisyon teknik/kritik bir rol ise (mühendislik, güvenlik, veri, sistem yönetimi vb.) mektubun
+   tonu da buna göre daha teknik ve iddialı olsun — genel bir "ilgiliyim" mektubu gibi durmasın.
+
+Diğer kurallar:
 - 250-350 kelime.
-- Şirketin özelliklerine referans ver.
+- Şirketin işine/sektörüne gerçekten referans ver (jenerik "değerli şirketiniz" değil).
 - 'Sayın İnsan Kaynakları Yetkilisi,' ile başla.
 - Ek açıklama ekleme, sadece mektup metnini yaz.
 

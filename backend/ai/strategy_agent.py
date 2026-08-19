@@ -2,12 +2,9 @@
 Kariyer Ajanı 2.0 — Oracle Career Strategist Agent
 Mevcut profil vs Hedef pozisyon analizi + 6 aylık yol haritası.
 """
-import json
 import logging
 from typing import List, Dict, Any, Optional
-from google import genai
-from google.genai import types
-from backend.config import settings
+from backend.ai.gemini_client import _call_model_async_json
 
 logger = logging.getLogger("StrategyAgent")
 
@@ -57,20 +54,9 @@ Lütfen şu formatta JSON döndür:
 
 SADECE JSON döndür."""
 
-    try:
-        client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
-        response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        return json.loads(response.text)
-    except Exception as e:
-        logger.error(f"[StrategyAgent] Hata: {e}")
-        return {
-            "market_overview": {"salary_range": "Veri alınamadı", "demand_level": "Bilinmiyor", "top_technologies": []},
-            "skill_gap_analysis": [],
-            "roadmap_6_months": [],
-            "project_ideas": [],
-            "final_advice": "Strateji şu an oluşturulamıyor."
-        }
+    # _call_model_async_json geçici 503'lerde otomatik 2 kez daha dener; kalıcı
+    # hatada AIServiceError fırlatır (çağıran _run_strategy bunu zaten
+    # push_agent_event(..., 'failed', ...) ile arayüze doğru yansıtıyor —
+    # önceden burada her hata sessizce boş-ama-'başarılı' bir strateji
+    # objesine düşüyordu).
+    return await _call_model_async_json(prompt, api_key=api_key)

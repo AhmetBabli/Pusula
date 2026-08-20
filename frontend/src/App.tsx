@@ -12,6 +12,7 @@ import { TourOverlay } from './tour/TourOverlay';
 import { Auth } from './components/auth/Auth';
 import { ProfileView, UserProfile } from './components/dashboard/ProfileView';
 import { AgentOrchestrator } from './components/agents/AgentOrchestrator';
+import { InterviewCoach } from './components/agents/InterviewCoach';
 import DashboardView from './components/dashboard/DashboardView';
 import JobsView from './components/jobs/JobsView';
 import ApplicationsView from './components/applications/ApplicationsView';
@@ -32,12 +33,12 @@ import {
   getProfile, getToken, logout as apiLogout,
 } from './services/api';
 
-type Tab = 'dashboard' | 'jobs' | 'applications' | 'events' | 'cv' | 'inbox' | 'profile' | 'agents';
+type Tab = 'dashboard' | 'jobs' | 'applications' | 'events' | 'cv' | 'inbox' | 'profile' | 'agents' | 'interview';
 type AppState = 'loading' | 'onboarding' | 'auth' | 'intake' | 'dashboard';
 
 // Sıra, Navigation.tsx'in sabit 7 bölümüyle (Dashboard/Pazar Analizi/Başvurular/
 // Etkinlikler/Portföy/Gelen Kutusu/Ajan Merkezi) birebir eşleşmeli.
-const SIDEBAR_TABS: Tab[] = ['dashboard', 'jobs', 'applications', 'events', 'cv', 'inbox', 'agents'];
+const SIDEBAR_TABS: Tab[] = ['dashboard', 'jobs', 'applications', 'events', 'cv', 'inbox', 'agents', 'interview'];
 
 /* ── GLOBAL FOOTER ── */
 const Footer = () => {
@@ -431,7 +432,7 @@ const App: React.FC = () => {
         onUpdateOutcome={handleUpdateOutcome}
       />
     ),
-    events: <EventsView events={events} isLoading={eventsLoading} onUpdateStatus={handleUpdateEventStatus} />,
+    events: <EventsView events={events} isLoading={eventsLoading} onUpdateStatus={handleUpdateEventStatus} onEventsFound={refreshEvents} />,
     cv: (
       <CVView
         cvs={cvs}
@@ -453,6 +454,7 @@ const App: React.FC = () => {
     ),
     profile: <ProfileView userProfile={userProfile} onSave={setUserProfile} onLogout={handleLogout} />,
     agents: <AgentOrchestrator />,
+    interview: <InterviewCoach />,
   };
 
   const currentState = appState;

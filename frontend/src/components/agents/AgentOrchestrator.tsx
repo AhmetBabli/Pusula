@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Calendar, FileText, MessageSquare, Send, Compass, Terminal, Wifi, WifiOff, RotateCcw, Download, CheckCircle, AlertCircle, Mail, X, Info } from 'lucide-react';
+import { Search, FileText, MessageSquare, Send, Compass, Terminal, Wifi, WifiOff, RotateCcw, Download, CheckCircle, AlertCircle, Mail, X, Info } from 'lucide-react';
 import { useAgentWebSocket, AgentStates } from '../../hooks/useAgentWebSocket';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
-import { InterviewCoach } from './InterviewCoach';
 
 // ── API Çağrıları ──────────────────────────────────────────────────────────
 const API = '/api/agents';
@@ -222,11 +221,9 @@ function StrategyResults({ data, t }: { data: Record<string, any>; t: (k: string
 // ── Sekme Tanımları ─────────────────────────────────────────────────────────
 const TABS: { key: keyof AgentStates; icon: React.ElementType; titleKey: string }[] = [
   { key: 'web_search', icon: Search, titleKey: 'agents_research_title' },
-  { key: 'event_search', icon: Calendar, titleKey: 'agents_events_title' },
   { key: 'cv_architect', icon: FileText, titleKey: 'agents_cv_title' },
   { key: 'outreach', icon: Send, titleKey: 'agents_outreach_title' },
   { key: 'strategy', icon: Compass, titleKey: 'agents_strategy_title' },
-  { key: 'interview_coach', icon: MessageSquare, titleKey: 'agents_interview_title' },
 ];
 
 const DOT_TONE: Record<string, string> = {
@@ -246,11 +243,6 @@ export function AgentOrchestrator() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLocation, setSearchLocation] = useState('İstanbul');
 
-  // Event Search state
-  const [eventsExpanded, setEventsExpanded] = useState(false);
-  const [eventsQuery, setEventsQuery] = useState('');
-  const [eventsLocation, setEventsLocation] = useState('İstanbul');
-
   // Outreach state
   const [outreachExpanded, setOutreachExpanded] = useState(false);
   const [outreachCompany, setOutreachCompany] = useState('');
@@ -269,16 +261,6 @@ export function AgentOrchestrator() {
     setActionError(null);
     try {
       await apiPost('/search', { query: searchQuery, location: searchLocation, session_id: sessionId });
-    } catch (err) {
-      setActionError((err as Error).message);
-    }
-  };
-
-  const handleEventSearch = async () => {
-    if (!eventsQuery.trim()) return;
-    setActionError(null);
-    try {
-      await apiPost('/search-events', { query: eventsQuery, location: eventsLocation, session_id: sessionId });
     } catch (err) {
       setActionError((err as Error).message);
     }
@@ -465,59 +447,6 @@ export function AgentOrchestrator() {
             </AgentCard>
           )}
 
-          {activeTab === 'event_search' && (
-            <AgentCard
-              id="event_search" title={t('agents_events_title')} subtitle={t('agents_events_subtitle')}
-              icon={Calendar}
-              status={agents.event_search.status} step={agents.event_search.step}
-              progress={agents.event_search.progress} data={agents.event_search.data}
-              onReset={() => { resetAgent('event_search'); setEventsExpanded(false); }}
-            >
-              <ToolInfoBanner text={t('agents_events_info')} />
-              {agents.event_search.status === 'idle' && !eventsExpanded && (
-                <button
-                  onClick={() => setEventsExpanded(true)}
-                  className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
-                >
-                  {t('agents_start_button')}
-                </button>
-              )}
-              {agents.event_search.status === 'idle' && eventsExpanded && (
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    autoFocus
-                    className="flex-[2] bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
-                    placeholder={t('agents_search_query_placeholder')}
-                    value={eventsQuery}
-                    onChange={e => setEventsQuery(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleEventSearch()}
-                  />
-                  <input
-                    className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
-                    placeholder={t('agents_location_placeholder')}
-                    value={eventsLocation}
-                    onChange={e => setEventsLocation(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleEventSearch()}
-                  />
-                  <button
-                    onClick={handleEventSearch}
-                    disabled={!connected || !eventsQuery.trim()}
-                    className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
-                  >
-                    {t('agents_search_button')}
-                  </button>
-                </div>
-              )}
-              {agents.event_search.status === 'done' && (
-                <div className="text-sm text-on-surface-variant font-body">
-                  <span className="text-on-surface font-semibold font-mono tabular-nums">{(agents.event_search.data?.saved_count as number) ?? 0}</span> {t('agents_events_found_suffix')}
-                  {' '}{t('agents_review_in')}
-                  <span className="text-primary hover:underline cursor-pointer font-medium transition-colors duration-150"> {t('nav_events')}</span>.
-                </div>
-              )}
-            </AgentCard>
-          )}
-
           {activeTab === 'cv_architect' && (
             <AgentCard
               id="cv_architect" title={t('agents_cv_title')} subtitle={t('agents_cv_subtitle')}
@@ -652,8 +581,6 @@ export function AgentOrchestrator() {
               )}
             </AgentCard>
           )}
-
-          {activeTab === 'interview_coach' && <InterviewCoach />}
         </motion.div>
       </AnimatePresence>
 

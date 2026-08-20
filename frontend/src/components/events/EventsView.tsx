@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, MapPin, Clock, ExternalLink, Heart, BadgeCheck, CheckCircle2, X } from 'lucide-react';
+import { Calendar, MapPin, Clock, ExternalLink, Heart, BadgeCheck, CheckCircle2, X, Search, Compass, AlertCircle } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { useAgentWebSocket } from '../../hooks/useAgentWebSocket';
+import { getToken } from '../../services/api';
 
 const EVENT_TYPE_KEYS = {
   hackathon: 'events_type_hackathon',
@@ -69,9 +71,31 @@ function EventStatusActions({ event, onUpdateStatus, t }) {
   );
 }
 
-function EventsView({ events, isLoading, onUpdateStatus }) {
+function EventsView({ events, isLoading, onUpdateStatus, onEventsFound }) {
   const { t, language } = useLanguage();
   const eventTypeLabel = (eventType) => (eventType && EVENT_TYPE_KEYS[eventType] ? t(EVENT_TYPE_KEYS[eventType]) : eventType);
+  const { agents, sessionId, connected } = useAgentWebSocket();
+  const [query, setQuery] = useState('');
+  const [location, setLocation] = useState('İstanbul');
+  const search = agents.event_search;
+
+  useEffect(() => {
+    if (search.status === 'done') {
+      onEventsFound?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.status]);
+
+  const handleSearch = async () => {
+    if (!query.trim() || search.status === 'running') return;
+    const token = getToken() || '';
+    await fetch('/api/agents/search-events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ query, location, session_id: sessionId }),
+    });
+  };
+
   const containerVariants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.06 } }
@@ -103,7 +127,45 @@ function EventsView({ events, isLoading, onUpdateStatus }) {
             {events.length} {t('events_upcoming_suffix')}
           </p>
         </div>
+
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder={t('events_search_query_placeholder')}
+            className="bg-surface-container border border-outline-variant/15 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150 w-full sm:w-56"
+          />
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder={t('agents_location_placeholder')}
+            className="bg-surface-container border border-outline-variant/15 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150 w-full sm:w-36"
+          />
+          <button
+            onClick={handleSearch}
+            disabled={!connected || !query.trim() || search.status === 'running'}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-container hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {search.status === 'running' ? <Compass className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            {search.status === 'running' ? t('events_searching') : t('events_search_button')}
+          </button>
+        </div>
       </motion.div>
+
+      {search.status === 'failed' && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {search.step}
+        </div>
+      )}
+      {search.status === 'done' && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span className="font-semibold tabular-nums">{search.data?.saved_count ?? 0}</span> {t('agents_events_found_suffix')}
+        </div>
+      )}
 
       {/* List section */}
       <div className="w-full">

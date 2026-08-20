@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { LayoutDashboard, Network, ClipboardList, Calendar, FileText, Mail, Bot } from 'lucide-react';
+import { LayoutDashboard, Network, ClipboardList, Calendar, FileText, Mail, Bot, MessageSquare } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../../i18n/LanguageContext';
 
@@ -14,6 +14,7 @@ function Navigation({ activeIndex, onChange, isAuthenticated }) {
     { id: 4, label: t('nav_portfolio'), icon: FileText },
     { id: 5, label: t('nav_inbox'), icon: Mail },
     { id: 6, label: t('nav_agents'), icon: Bot },
+    { id: 7, label: t('nav_interview'), icon: MessageSquare },
   ];
 
   const visibleSections = isAuthenticated 

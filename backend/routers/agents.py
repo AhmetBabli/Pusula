@@ -289,6 +289,7 @@ async def _run_strategy(session_id: str, target_job: str, target_location: str, 
             target_job=target_job,
             target_location=target_location,
             github_analysis=repo_summary,
+            linkedin_data=user.linkedin_data or "",
             api_key=user.gemini_api_key,
         )
 

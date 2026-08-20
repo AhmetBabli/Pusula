@@ -70,3 +70,14 @@ def test_update_profile_partial_update_does_not_clear_other_fields(client):
 def test_profile_requires_authentication(client):
     res = client.get("/api/users/profile")
     assert res.status_code == 401
+
+
+def test_update_profile_persists_linkedin_data(client):
+    headers = _auth_headers(client, "profile-linkedin@example.com")
+    raw = "Deneyim:\nX Şirketi - Stajyer\n\nBeceriler:\nPython, SQL"
+
+    res = client.patch("/api/users/profile", json={"linkedin_data": raw}, headers=headers)
+    assert res.status_code == 200
+
+    profile = client.get("/api/users/profile", headers=headers).json()
+    assert profile["linkedin_data"] == raw

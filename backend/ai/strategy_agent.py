@@ -14,6 +14,7 @@ async def generate_career_strategy(
     target_job: str,
     target_location: str = "Global",
     github_analysis: str = "",
+    linkedin_data: str = "",
     api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -26,6 +27,7 @@ MEVCUT DURUM:
 - Ünvan: {current_title}
 - Yetenekler: {', '.join(current_skills)}
 - GitHub Analizi: {github_analysis[:1000]}
+- LinkedIn Profilinden (deneyim/eğitim): {linkedin_data[:1500] or "Belirtilmemiş"}
 
 HEDEF:
 - Pozisyon: {target_job}

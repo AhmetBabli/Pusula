@@ -30,6 +30,11 @@ class UserProfile(Base):
 
     linkedin_url = Column(String(300), nullable=True)
     github_url = Column(String(300), nullable=True)
+    # LinkedIn'in herkese açık bir API'si yok ve profil kazıması (scraping)
+    # kendi kullanım şartlarını ihlal ediyor — bu yüzden kullanıcı kendi
+    # profilinden (Deneyim/Eğitim/Beceriler) kopyaladığı ham metni buraya
+    # yapıştırıyor. CV üretimi ve kariyer stratejisi bu metni bağlam olarak kullanır.
+    linkedin_data = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)  # Kısa biyografi
 
     # Kullanıcının kendi Gemini API key'i (şifreli) — her kullanıcı kendi

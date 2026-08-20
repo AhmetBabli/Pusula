@@ -73,6 +73,28 @@ def test_generate_cv_creates_ai_generated_cv(client, monkeypatch):
     assert body["extracted_text"] == "AI tarafından üretilmiş CV içeriği."
 
 
+def test_generate_cv_merges_linkedin_data_into_experience(client, monkeypatch):
+    headers = _auth_headers(client, "cv-gen-linkedin@example.com")
+    client.patch("/api/users/profile", json={"linkedin_data": "Deneyim:\nX Şirketi - Stajyer"}, headers=headers)
+
+    captured = {}
+
+    async def fake_generate_cv_content(**kwargs):
+        captured.update(kwargs)
+        return "İçerik"
+
+    monkeypatch.setattr("backend.ai.gemini_client.generate_cv_content", fake_generate_cv_content)
+
+    res = client.post(
+        "/api/cvs/generate",
+        json={"variant_type": "general", "skills": ["Python"], "experience": "Kendi yazdığım deneyim."},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert "Kendi yazdığım deneyim." in captured["experience"]
+    assert "X Şirketi - Stajyer" in captured["experience"]
+
+
 def test_delete_cv_removes_it(client, db_session):
     headers = _auth_headers(client, "cv-del@example.com")
     cv = _seed_cv(db_session, "cv-del@example.com")

@@ -197,7 +197,14 @@ async def generate_cv(
     """AI ile CV oluştur."""
     from backend.ai.gemini_client import generate_cv_content
 
-    # Bu endpoint de yavaş çalışacaktır ancak kullanıcı bir şeyin "üretilmesini" 
+    # Kullanıcı LinkedIn profilinden (Deneyim/Eğitim) kopyaladığı ham metni
+    # profiline kaydettiyse, formda tekrar yazmasına gerek kalmadan otomatik
+    # olarak deneyim bağlamına ekleniyor.
+    experience = req.experience
+    if current_user.linkedin_data:
+        experience = f"{experience}\n\nLinkedIn Profilinden:\n{current_user.linkedin_data}".strip()
+
+    # Bu endpoint de yavaş çalışacaktır ancak kullanıcı bir şeyin "üretilmesini"
     # talep ettiği için burada beklemesi (progress bar ile) kabul edilebilir.
     content = await generate_cv_content(
         user_name=req.user_name,
@@ -207,7 +214,7 @@ async def generate_cv(
         department=req.department,
         skills=req.skills,
         variant_type=req.variant_type,
-        experience=req.experience,
+        experience=experience,
         projects=req.projects,
         api_key=current_user.gemini_api_key,
     )

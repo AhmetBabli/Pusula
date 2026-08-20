@@ -18,6 +18,7 @@ export interface UserProfile {
   languages?: string[];
   linkedin_url?: string;
   github_url?: string;
+  linkedin_data?: string;
   summary?: string;
   has_gemini_api_key?: boolean;
 }
@@ -32,6 +33,7 @@ const EMPTY_PROFILE: UserProfile = {
   languages: [],
   linkedin_url: '',
   github_url: '',
+  linkedin_data: '',
   summary: '',
 };
 
@@ -106,6 +108,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
         languages: formData.languages,
         linkedin_url: formData.linkedin_url,
         github_url: formData.github_url,
+        linkedin_data: formData.linkedin_data,
         summary: formData.summary,
       };
       // Sadece kullanıcı gerçekten yeni bir key yazdıysa gönder — boşsa
@@ -248,6 +251,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                     <label htmlFor="profile-github" className={labelClass}>GitHub</label>
                     <input id="profile-github" type="url" value={formData.github_url || ''} onChange={e => setFormData({ ...formData, github_url: e.target.value })} placeholder="https://github.com/..." className={inputClass} />
                   </div>
+                </div>
+                <div>
+                  <label htmlFor="profile-linkedin-data" className={labelClass}>{t('profile_linkedin_data_label')}</label>
+                  <p className="text-xs text-on-surface-variant mb-2 leading-relaxed">{t('profile_linkedin_data_hint')}</p>
+                  <textarea
+                    id="profile-linkedin-data"
+                    value={formData.linkedin_data || ''}
+                    onChange={e => setFormData({ ...formData, linkedin_data: e.target.value })}
+                    placeholder={t('profile_linkedin_data_placeholder')}
+                    rows={5}
+                    className={`${inputClass} resize-none font-mono text-sm`}
+                  />
                 </div>
                 <div>
                   <label htmlFor="profile-summary" className={labelClass}>{t('profile_summary')}</label>

@@ -19,6 +19,7 @@ class ProfileUpdate(BaseModel):
     languages: Optional[List[str]] = None
     linkedin_url: Optional[str] = None
     github_url: Optional[str] = None
+    linkedin_data: Optional[str] = None
     summary: Optional[str] = None
     onboarding_completed: Optional[bool] = None
     gemini_api_key: Optional[str] = None
@@ -37,6 +38,7 @@ class UserProfileOut(BaseModel):
     languages: List[str] = []
     linkedin_url: Optional[str] = None
     github_url: Optional[str] = None
+    linkedin_data: Optional[str] = None
     summary: Optional[str] = None
     onboarding_completed: bool = False
     has_gemini_api_key: bool = False

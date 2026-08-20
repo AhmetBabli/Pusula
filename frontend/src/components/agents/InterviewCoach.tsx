@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, ChevronRight, RotateCcw, Loader2, Mail, CheckCircle2, AlertTriangle, Target, Search, Info } from 'lucide-react';
+import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Target, Search, Info, Compass } from 'lucide-react';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
 
@@ -226,7 +226,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
             disabled={!company.trim() || loadingQuestions}
             className="w-full py-3.5 mt-4 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 flex items-center justify-center gap-2"
           >
-            {loadingQuestions ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('interview_preparing')}</> : t('interview_start')}
+            {loadingQuestions ? <><Compass className="w-4 h-4 animate-spin" /> {t('interview_preparing')}</> : t('interview_start')}
           </button>
         </div>
       </motion.div>
@@ -287,7 +287,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
                 disabled={loadingOutreach}
                 className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] transition-all duration-150 flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100 shrink-0"
               >
-                {loadingOutreach ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('interview_outreach_generating')}</> : t('interview_outreach_generate_draft')}
+                {loadingOutreach ? <><Compass className="w-4 h-4 animate-spin" /> {t('interview_outreach_generating')}</> : t('interview_outreach_generate_draft')}
               </button>
             )}
           </div>
@@ -387,7 +387,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
                 disabled={!answer.trim() || loadingEval}
                 className="flex items-center gap-2 px-6 py-3 text-sm font-label text-white bg-primary-container border border-transparent rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
               >
-                {loadingEval ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('interview_analyzing')}</> : <><Send className="w-4 h-4" /> {t('interview_submit_answer')}</>}
+                {loadingEval ? <><Compass className="w-4 h-4 animate-spin" /> {t('interview_analyzing')}</> : <><Send className="w-4 h-4" /> {t('interview_submit_answer')}</>}
               </button>
             </div>
           </motion.div>

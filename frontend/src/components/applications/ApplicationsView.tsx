@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users, Award, CalendarCheck, MessageSquare, Loader2 } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users, Award, CalendarCheck, MessageSquare, Compass } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 function CopyButton({ text, label }) {
@@ -24,6 +24,34 @@ function CopyButton({ text, label }) {
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       {copied ? label?.copied : label?.copy}
     </button>
+  );
+}
+
+// Kolaps edilmiş özellik girişleri (soru-cevap, referans bulucu, mektup
+// düzenleme) tek satırlık küçük bir link gibi görünmesin diye — ikon rozeti +
+// başlık + kısa açıklama + gerçek bir buton içeren, kendi başına bir "özellik
+// kartı" gibi duran ortak bir bileşen.
+function FeaturePrompt({ icon: Icon, title, description, actionLabel, onAction, loading }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-md bg-primary-container/5 border border-primary-container/20">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-md bg-primary-container/15 flex items-center justify-center shrink-0">
+          <Icon className="w-4 h-4 text-primary" />
+        </div>
+        <div>
+          <div className="text-sm font-label font-semibold text-on-surface">{title}</div>
+          <div className="text-xs font-body text-on-surface-variant mt-0.5 leading-relaxed">{description}</div>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onAction}
+        disabled={loading}
+        className="px-4 py-2 rounded-md bg-primary-container text-white text-sm font-label hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 shrink-0 w-fit"
+      >
+        {loading ? '...' : actionLabel}
+      </button>
+    </div>
   );
 }
 
@@ -51,13 +79,13 @@ function CoverLetterChatBox({ appId, onRevise, labels }) {
 
   if (!expanded) {
     return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="text-xs font-label text-primary hover:underline underline-offset-2 w-fit flex items-center gap-1.5"
-      >
-        <MessageSquare className="w-3.5 h-3.5" /> {labels.editPrompt}
-      </button>
+      <FeaturePrompt
+        icon={MessageSquare}
+        title={labels.title}
+        description={labels.description}
+        actionLabel={labels.action}
+        onAction={() => setExpanded(true)}
+      />
     );
   }
 
@@ -100,7 +128,7 @@ function CoverLetterChatBox({ appId, onRevise, labels }) {
           className="p-2 rounded-md bg-primary-container text-white hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 transition-all shrink-0"
           aria-label={labels.title}
         >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          {loading ? <Compass className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
       </div>
     </div>
@@ -131,14 +159,13 @@ function CustomQuestionsBox({ appId, onSubmit, labels }) {
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary-container/10 border border-primary-container/25 text-primary text-sm font-label hover:bg-primary-container/20 active:scale-[0.98] transition-all duration-150 w-fit"
-      >
-        <HelpCircle className="w-4 h-4" />
-        {labels.prompt}
-      </button>
+      <FeaturePrompt
+        icon={HelpCircle}
+        title={labels.title}
+        description={labels.description}
+        actionLabel={labels.action}
+        onAction={() => setOpen(true)}
+      />
     );
   }
 
@@ -196,15 +223,14 @@ function ReferralBox({ appId, candidates, onFind, labels, copyLabel }) {
 
   if (!expanded) {
     return (
-      <button
-        type="button"
-        onClick={handleFind}
-        disabled={loading}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary-container/10 border border-primary-container/25 text-primary text-sm font-label hover:bg-primary-container/20 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 w-fit"
-      >
-        <Users className="w-4 h-4" />
-        {loading ? labels.loading : labels.prompt}
-      </button>
+      <FeaturePrompt
+        icon={Users}
+        title={labels.title}
+        description={labels.description}
+        actionLabel={loading ? labels.loading : labels.action}
+        onAction={handleFind}
+        loading={loading}
+      />
     );
   }
 
@@ -402,6 +428,9 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
   const copyLabel = { copy: t('applications_copy'), copied: t('applications_copied') };
   const customQaLabels = {
     prompt: t('applications_custom_qa_prompt'),
+    title: t('applications_custom_qa_title'),
+    description: t('applications_custom_qa_desc'),
+    action: t('applications_custom_qa_action'),
     hint: t('applications_custom_qa_hint'),
     placeholder: t('applications_custom_qa_placeholder'),
     cancel: t('applications_custom_qa_cancel'),
@@ -410,8 +439,9 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
     error: t('applications_custom_qa_error'),
   };
   const coverLetterChatLabels = {
-    editPrompt: t('applications_cover_letter_edit_prompt'),
     title: t('applications_cover_letter_chat_title'),
+    description: t('applications_cover_letter_chat_desc'),
+    action: t('applications_cover_letter_chat_action'),
     placeholder: t('applications_cover_letter_chat_placeholder'),
     updated: t('applications_cover_letter_chat_updated'),
     error: t('applications_cover_letter_chat_error'),
@@ -419,6 +449,8 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
   const referralLabels = {
     prompt: t('applications_referral_prompt'),
     title: t('applications_referral_title'),
+    description: t('applications_referral_desc'),
+    action: t('applications_referral_action'),
     refresh: t('applications_referral_refresh'),
     disclaimer: t('applications_referral_disclaimer'),
     empty: t('applications_referral_empty'),

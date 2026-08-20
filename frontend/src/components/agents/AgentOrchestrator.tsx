@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Calendar, FileText, MessageSquare, Send, Compass, Terminal, Wifi, WifiOff, RotateCcw, Download, Activity, CheckCircle, AlertCircle, Mail, X, Info } from 'lucide-react';
+import { Search, Calendar, FileText, MessageSquare, Send, Compass, Terminal, Wifi, WifiOff, RotateCcw, Download, CheckCircle, AlertCircle, Mail, X, Info } from 'lucide-react';
 import { useAgentWebSocket, AgentStates } from '../../hooks/useAgentWebSocket';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
@@ -82,7 +82,7 @@ function AgentCard({ title, subtitle, icon: Icon, status, step, progress, onRese
         <div className="flex items-center gap-3">
           {isRunning && (
             <div className="flex items-center gap-2 text-xs font-label text-primary bg-primary-container/10 px-3 py-1 rounded-md border border-primary-container/20">
-              <Activity className="w-3.5 h-3.5 animate-spin" /> {t('agents_status_running')}
+              <Compass className="w-3.5 h-3.5 animate-spin" /> {t('agents_status_running')}
             </div>
           )}
           {isDone && (

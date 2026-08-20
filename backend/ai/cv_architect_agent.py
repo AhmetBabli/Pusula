@@ -173,7 +173,12 @@ def _sanitize_for_pdf(text: str) -> str:
     indirmenin fiilen hiç çalışmadığı anlamına geliyordu). ç/ö/ü zaten
     Latin-1'de olduğu için dokunulmuyor; geri kalan (beklenmeyen) karakterler
     PDF'i çökertmek yerine sessizce '?' olur."""
-    replacements = {"ı": "i", "İ": "I", "ğ": "g", "Ğ": "G", "ş": "s", "Ş": "S"}
+    replacements = {
+        "ı": "i", "İ": "I", "ğ": "g", "Ğ": "G", "ş": "s", "Ş": "S",
+        # Gemini'nin sık ürettiği "akıllı" tipografi karakterleri de Latin-1
+        # dışında — bunlar da '?' yerine düzgün ASCII karşılıklarına düşsün.
+        "–": "-", "—": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "...",
+    }
     for src, dst in replacements.items():
         text = text.replace(src, dst)
     return text.encode("latin-1", errors="replace").decode("latin-1")

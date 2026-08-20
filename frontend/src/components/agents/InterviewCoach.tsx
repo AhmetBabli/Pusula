@@ -64,37 +64,75 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [outreachResult, setOutreachResult] = useState<{cold_email: string, linkedin_dm: string} | null>(null);
   const [loadingOutreach, setLoadingOutreach] = useState(false);
 
-  // Sesli mülakat: soruyu dinleme (TTS) + cevabı konuşarak yazdırma (STT)
+  // Sesli sohbet: soru otomatik seslendirilir (TTS), bitince mikrofon otomatik
+  // açılır (STT), kullanıcı sessize düşünce cevap otomatik gönderilir — tıklama
+  // gerekmeden gerçek bir görüşme akışı. Butonlar manuel müdahale için hep orada.
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
   const [sttSupported, setSttSupported] = useState(true);
+  const [micError, setMicError] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<any>(null);
+  const silenceTimerRef = useRef<any>(null);
+  const autoSubmitPendingRef = useRef(false);
+  const submitAnswerRef = useRef<() => void>(() => {});
 
   const sessionId = crypto.randomUUID();
 
-  const speakQuestion = async (text: string) => {
-    if (!text) return;
-    try {
-      const token = getToken() || '';
-      const res = await fetch(`${API}/tts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) return; // sesli okuma opsiyonel bir katman — başarısız olursa sessizce vazgeç, mülakatı engellemesin
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      audioRef.current?.pause();
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onplay = () => setSpeaking(true);
-      audio.onended = () => setSpeaking(false);
-      audio.onerror = () => setSpeaking(false);
-      await audio.play().catch(() => setSpeaking(false)); // tarayıcı autoplay engeli — kullanıcı manuel dinle butonuna basar
-    } catch {
-      setSpeaking(false);
+  const clearSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
+  };
+
+  // Kullanıcı konuşmayı bıraktıktan ~2sn sonra dinlemeyi durdurup cevabı otomatik gönder
+  const resetSilenceTimer = () => {
+    if (!autoSubmitPendingRef.current) return;
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      try { recognitionRef.current?.stop(); } catch {}
+    }, 2200);
+  };
+
+  const startListeningAuto = () => {
+    if (!recognitionRef.current || !sttSupported) return;
+    autoSubmitPendingRef.current = true;
+    setMicError(false);
+    try {
+      recognitionRef.current.start();
+      setListening(true);
+    } catch {
+      // zaten çalışıyorsa start() hata fırlatır — sessizce yok say
+    }
+  };
+
+  const speakQuestion = (text: string): Promise<void> => {
+    if (!text) return Promise.resolve();
+    return (async () => {
+      try {
+        const token = getToken() || '';
+        const res = await fetch(`${API}/tts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) return; // sesli okuma opsiyonel bir katman — anahtar yoksa sohbet yine de STT ile devam eder
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        audioRef.current?.pause();
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        await new Promise<void>((resolve) => {
+          audio.onplay = () => setSpeaking(true);
+          audio.onended = () => { setSpeaking(false); resolve(); };
+          audio.onerror = () => { setSpeaking(false); resolve(); };
+          audio.play().catch(() => { setSpeaking(false); resolve(); }); // tarayıcı autoplay engeli — manuel dinle butonu hep orada
+        });
+      } catch {
+        setSpeaking(false);
+      }
+    })();
   };
 
   // Konuşma tanıma (STT) motorunu bir kere kur — soru değiştikçe yeniden kurmaya gerek yok
@@ -107,7 +145,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     const recognition = new SpeechRecognitionCtor();
     recognition.lang = 'tr-TR';
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.onresult = (event: any) => {
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -116,9 +154,24 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       if (finalTranscript.trim()) {
         setAnswer(prev => (prev ? `${prev} ${finalTranscript.trim()}` : finalTranscript.trim()));
       }
+      resetSilenceTimer(); // konuşma devam ettikçe "sustu" sayacını sıfırla
     };
-    recognition.onerror = () => setListening(false);
-    recognition.onend = () => setListening(false);
+    recognition.onerror = (e: any) => {
+      setListening(false);
+      clearSilenceTimer();
+      if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
+        setMicError(true);
+        autoSubmitPendingRef.current = false;
+      }
+    };
+    recognition.onend = () => {
+      setListening(false);
+      clearSilenceTimer();
+      if (autoSubmitPendingRef.current) {
+        autoSubmitPendingRef.current = false;
+        submitAnswerRef.current();
+      }
+    };
     recognitionRef.current = recognition;
 
     return () => {
@@ -131,10 +184,13 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
   const toggleListening = () => {
     if (!recognitionRef.current) return;
+    autoSubmitPendingRef.current = false; // manuel kontrol: gönderme kararı kullanıcıda kalsın
+    clearSilenceTimer();
     if (listening) {
       recognitionRef.current.stop();
       setListening(false);
     } else {
+      setMicError(false);
       try {
         recognitionRef.current.start();
         setListening(true);
@@ -144,14 +200,27 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     }
   };
 
-  // Yeni soru geldiğinde otomatik seslendirmeyi dene (tarayıcı engellerse buton hep orada)
+  // Yeni soru geldiğinde: sesli sor, bitince otomatik dinlemeye geç (sesli sohbet akışı)
   useEffect(() => {
     if (phase === 'interview' && questions[currentIdx]) {
-      speakQuestion(questions[currentIdx].question);
+      speakQuestion(questions[currentIdx].question).then(startListeningAuto);
     }
-    return () => { audioRef.current?.pause(); };
+    return () => {
+      audioRef.current?.pause();
+      clearSilenceTimer();
+      autoSubmitPendingRef.current = false;
+      try { recognitionRef.current?.stop(); } catch {}
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, currentIdx]);
+
+  // Değerlendirme geldiğinde skoru ve geri bildirimi de sesli oku
+  useEffect(() => {
+    if (evaluation) {
+      speakQuestion(`${evaluation.score}. ${evaluation.feedback}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evaluation]);
 
   const generateOutreach = async () => {
     setLoadingOutreach(true);
@@ -199,6 +268,9 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
   const submitAnswer = async () => {
     if (!answer.trim() || !questions[currentIdx]) return;
+    autoSubmitPendingRef.current = false;
+    clearSilenceTimer();
+    try { recognitionRef.current?.stop(); } catch {}
     setLoadingEval(true);
     setError(null);
     const q = questions[currentIdx];
@@ -222,6 +294,11 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       setLoadingEval(false);
     }
   };
+
+  // Sessizlik sayacı submitAnswer'ı çağırdığında her zaman en güncel halini kullansın
+  useEffect(() => {
+    submitAnswerRef.current = submitAnswer;
+  });
 
   const nextQuestion = () => {
     if (currentIdx + 1 >= questions.length) {
@@ -442,6 +519,13 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         />
       </div>
 
+      {(speaking || listening) && (
+        <div className={`flex items-center gap-2 text-xs font-label mt-4 ${speaking ? 'text-primary' : 'text-error'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${speaking ? 'bg-primary' : 'bg-error'}`} />
+          {speaking ? t('interview_ai_speaking') : t('interview_ai_listening')}
+        </div>
+      )}
+
       {/* Question */}
       <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 mt-6 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
@@ -496,6 +580,12 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
               <div className="flex items-center gap-2 text-xs font-label text-error">
                 <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
                 {t('interview_listening_active')}
+              </div>
+            )}
+            {micError && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{t('interview_mic_permission_denied')}</span>
               </div>
             )}
             {error && (

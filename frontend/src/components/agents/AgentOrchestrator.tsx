@@ -604,9 +604,7 @@ export function AgentOrchestrator() {
               className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-5 h-64 overflow-y-auto font-mono text-[13px] text-on-surface-variant space-y-1.5"
             >
               {logs.length === 0 && <div className="text-on-surface-variant/40">{t('agents_log_empty')}</div>}
-              {logs.map((l, i) => <div key={i} className="leading-snug">
-                <span className="text-primary/50 mr-2">[{new Date().toISOString().substring(11,19)}]</span> {l}
-              </div>)}
+              {logs.map((l, i) => <div key={i} className="leading-snug">{l}</div>)}
             </motion.div>
           )}
         </AnimatePresence>

@@ -162,26 +162,35 @@ class GmailService:
 
     @staticmethod
     def _extract_api_body(payload: dict) -> str:
-        """Gmail API mesaj payload'ından (base64url) düz metin gövdeyi çıkarır."""
+        """Gmail API mesaj payload'ından (base64url) düz metin gövdeyi çıkarır.
+
+        multipart/alternative yapısında text/plain genelde text/html'den ÖNCE
+        gelir, ama pazarlama e-postalarında text/plain sık sık sadece bir-iki
+        kelimelik bir "yedek" metindir (gerçek içerik HTML'de) — ilk bulunan
+        dolu parçayı döndürmek bu durumda neredeyse boş bir sonuç veriyordu.
+        Bunun yerine tüm adayları toplayıp en UZUN olanı (= gerçek içerik)
+        döndürüyoruz."""
         def decode_part(data: str) -> str:
             try:
                 return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8", errors="replace")
             except Exception:
                 return ""
 
-        mime_type = payload.get("mimeType", "")
-        body_data = payload.get("body", {}).get("data")
-        if mime_type == "text/plain" and body_data:
-            return decode_part(body_data)
-        if mime_type == "text/html" and body_data:
-            html = decode_part(body_data)
-            return bs4.BeautifulSoup(html, "html.parser").get_text(separator="\n").strip()
+        candidates: list[str] = []
 
-        for part in payload.get("parts", []) or []:
-            text = GmailService._extract_api_body(part)
-            if text:
-                return text
-        return ""
+        def collect(node: dict) -> None:
+            mime_type = node.get("mimeType", "")
+            body_data = node.get("body", {}).get("data")
+            if mime_type == "text/plain" and body_data:
+                candidates.append(decode_part(body_data).strip())
+            elif mime_type == "text/html" and body_data:
+                html = decode_part(body_data)
+                candidates.append(bs4.BeautifulSoup(html, "html.parser").get_text(separator="\n").strip())
+            for part in node.get("parts", []) or []:
+                collect(part)
+
+        collect(payload)
+        return max(candidates, key=len, default="")
 
     @staticmethod
     def _decode_header(header_value: str) -> str:
@@ -203,34 +212,40 @@ class GmailService:
         return "".join(result)
 
     def _extract_body(self, msg) -> str:
-        """MIME mesajından düz metin gövdesini güvenli bir şekilde çıkarır."""
+        """MIME mesajından düz metin gövdesini güvenli bir şekilde çıkarır.
+
+        Birden fazla text/plain veya text/html parçası varsa (multipart/
+        alternative) en son bulunanı almak yerine en UZUN olanı seçiyoruz —
+        pazarlama e-postalarında text/plain sık sık bir-iki kelimelik boş bir
+        "yedek" oluyor, gerçek içerik HTML'de kalıyordu."""
         body_text = ""
-        
+
         if msg.is_multipart():
+            candidates = []
             for part in msg.walk():
                 content_type = part.get_content_type()
                 content_disposition = str(part.get("Content-Disposition", ""))
-                
+
                 if "attachment" in content_disposition:
                     continue
-                    
+
                 if content_type in ["text/plain", "text/html"]:
                     payload = part.get_payload(decode=True)
                     if payload is None:
                         continue
-                        
+
                     charset = part.get_content_charset() or 'utf-8'
                     try:
                         decoded_text = payload.decode(charset, errors='replace')
                     except LookupError:
                         decoded_text = payload.decode('utf-8', errors='replace')
-                        
+
                     if content_type == "text/html":
                         decoded_text = self._html_to_text(decoded_text)
-                    
-                    # Eğer hem plain hem html varsa üzerine yazmamak için (veya birini tercih edebilirsin)
-                    # Genellikle multipart/alternative yapısında en iyi format sona eklenir.
-                    body_text = decoded_text
+
+                    candidates.append(decoded_text.strip())
+
+            body_text = max(candidates, key=len, default="")
         else:
             payload = msg.get_payload(decode=True)
             if payload:

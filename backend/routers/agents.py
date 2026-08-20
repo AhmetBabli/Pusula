@@ -51,7 +51,6 @@ class InterviewStartRequest(BaseModel):
     job_title: str = ""
     job_description: str = ""
     round_type: Literal["technical", "hr", "mixed"] = "mixed"
-    question_count: int = Field(default=5, ge=2, le=10)
 
 class InterviewAnswerRequest(BaseModel):
     session_id: str
@@ -347,7 +346,8 @@ async def interview_start(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """Mülakat soruları üretir ve senkron olarak döner (5-10 soru)."""
+    """Şirkete, pozisyona ve adayın bölümüne özel mülakat soruları üretir.
+    Soru sayısı sabit değildir — Gemini pozisyonun karmaşıklığına göre karar verir."""
     from backend.ai.interview_coach_agent import generate_questions
 
     job_title = req.job_title
@@ -372,7 +372,6 @@ async def interview_start(
         job_description=job_desc,
         company_name=company or "Genel",
         round_type=req.round_type,
-        count=req.question_count,
         user_context=user_context,
         api_key=current_user.gemini_api_key,
     )

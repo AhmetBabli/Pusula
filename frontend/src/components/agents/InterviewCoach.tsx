@@ -251,7 +251,6 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         job_description: jobDescription,
         job_id: jobId,
         round_type: roundType,
-        question_count: 5,
       });
       setQuestions(data.questions || []);
       setCurrentIdx(0);

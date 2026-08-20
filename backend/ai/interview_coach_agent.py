@@ -1,10 +1,14 @@
 """
 Kariyer Ajanı 2.0 — Interview Coach Agent
-Şirkete özel teknik/IK soru üretimi + cevap değerlendirmesi.
+Şirkete, pozisyona ve adayın bölümüne özel mülakat sorusu üretimi + cevap
+değerlendirmesi. Şirketin mülakat tarzı/kültürü statik bir tablodan değil,
+Gemini'nin Google Search grounding'i ile canlı araştırılarak belirlenir
+(bkz. web_search_agent.py — aynı desen).
 """
 import asyncio
 import json
 import logging
+import re
 from typing import Literal, Optional
 from google import genai
 from google.genai import types
@@ -13,6 +17,10 @@ from backend.config import settings
 from backend.exceptions import AIServiceError
 
 logger = logging.getLogger("InterviewCoachAgent")
+
+
+def _get_client(api_key: Optional[str] = None) -> genai.Client:
+    return genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
 
 
 async def _generate_json_with_retry(client: genai.Client, prompt: str, log_prefix: str) -> dict | list:
@@ -41,37 +49,36 @@ async def _generate_json_with_retry(client: genai.Client, prompt: str, log_prefi
             logger.error(f"[{log_prefix}] Gemini API çağrısında hata: {type(e).__name__} - {e}")
             raise AIServiceError(f"AI service error: {e}")
 
-# Şirket kültürü veritabanı — mülakat ağırlıkları
-COMPANY_PROFILES: dict[str, dict] = {
-    "baykar": {
-        "style": "teknik-ağırlıklı, mühendislik odaklı",
-        "focus": ["C/C++", "gömülü sistemler", "algoritma", "matematik", "problem çözme"],
-        "hr_style": "milliyetçi değerler, sorumluluk bilinci, disiplin",
-    },
-    "turkcell": {
-        "style": "vaka analizi ağırlıklı, iş odaklı",
-        "focus": ["telekomunikasyon", "dijital dönüşüm", "müşteri deneyimi", "ürün yönetimi"],
-        "hr_style": "liderlik, inovasyon, müşteri odaklılık",
-    },
-    "trendyol": {
-        "style": "hız, ölçek, veri odaklı",
-        "focus": ["sistem tasarımı", "mikroservisler", "veri yapıları", "SQL optimizasyonu"],
-        "hr_style": "ownership, büyüme zihniyeti, sonuç odaklılık",
-    },
-    "default": {
-        "style": "dengeli teknik + IK",
-        "focus": ["problem çözme", "takım çalışması", "teknoloji", "proje yönetimi"],
-        "hr_style": "iletişim, uyum, öğrenme hızı",
-    },
-}
 
-
-def _get_company_profile(company_name: str) -> dict:
-    key = company_name.lower().strip()
-    for k, v in COMPANY_PROFILES.items():
-        if k in key:
-            return v
-    return COMPANY_PROFILES["default"]
+async def _generate_grounded_json_with_retry(client: genai.Client, prompt: str, log_prefix: str) -> list:
+    """Google Search grounding ile üretir — grounding aktifken
+    response_mime_type=json kullanılamadığı için (bkz. web_search_agent.py)
+    yanıt metninden JSON dizisini regex ile ayıklar. Ayıklama başarısız
+    olursa sessizce boş liste dönüp mülakatı "0 soru" ile kırmak yerine
+    AIServiceError fırlatır."""
+    config = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
+    for attempt in range(3):
+        try:
+            response = await client.aio.models.generate_content(
+                model=settings.GEMINI_MODEL, contents=prompt, config=config,
+            )
+            text = (response.text or "").strip()
+            match = re.search(r'\[.*\]', text, re.DOTALL)
+            if not match:
+                raise AIServiceError("Mülakat soruları üretilemedi (AI yanıtı ayrıştırılamadı).")
+            return json.loads(match.group())
+        except genai_errors.ServerError as e:
+            if attempt < 2:
+                logger.warning(f"[{log_prefix}] Gemini geçici olarak meşgul (deneme {attempt + 1}/3), tekrar deneniyor: {e}")
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            logger.error(f"[{log_prefix}] Gemini API sürekli meşgul, vazgeçildi: {e}")
+            raise AIServiceError(f"AI service temporarily unavailable: {e}")
+        except AIServiceError:
+            raise
+        except Exception as e:
+            logger.error(f"[{log_prefix}] Gemini API çağrısında hata: {type(e).__name__} - {e}")
+            raise AIServiceError(f"AI service error: {e}")
 
 
 async def generate_questions(
@@ -79,34 +86,55 @@ async def generate_questions(
     job_description: str,
     company_name: str,
     round_type: Literal["technical", "hr", "mixed"] = "mixed",
-    count: int = 5,
+    count: Optional[int] = None,
     user_context: str = "",
     api_key: Optional[str] = None,
 ) -> list[dict]:
     """
-    Şirket kültürüne + ilan içeriğine + adayın profiline uygun mülakat soruları üretir.
+    Google Search grounding ile "{company_name}" hakkında canlı araştırma yapıp
+    (sektör, teknoloji yığını, mülakat tarzı/kültürü) + pozisyona + adayın
+    bölümüne özel mülakat soruları üretir. Soru sayısı sabit değildir —
+    count verilmezse Gemini pozisyonun karmaşıklığına göre kendisi karar verir.
     Returns: [{"id": 1, "question": "...", "type": "technical|hr", "hint": "..."}]
     """
-    profile = _get_company_profile(company_name)
-
     type_instruction = {
-        "technical": f"Sadece teknik sorular üret. Odak: {', '.join(profile['focus'][:4])}",
-        "hr": f"Sadece IK/davranışsal sorular üret. Tarz: {profile['hr_style']}",
-        "mixed": f"Karışık: {count//2} teknik, {count - count//2} IK sorusu.",
+        "technical": "Sadece teknik/mesleki sorular üret.",
+        "hr": "Sadece IK/davranışsal sorular üret.",
+        "mixed": "Teknik ve IK sorularının dengeli bir karışımını üret.",
     }[round_type]
 
-    prompt = f"""Sen deneyimli bir {company_name} mülakatçısısın.
-Şirket kültürü: {profile['style']}
+    count_instruction = (
+        f"Tam olarak {count} soru üret."
+        if count
+        else "Kaç soru gerektiğine kendin karar ver — pozisyonun ve şirketin mülakat "
+             "tarzının karmaşıklığına göre genelde 4 ile 8 arasında olur; kıdemli veya "
+             "çok yönlü roller için daha fazla, basit/stajyer rolleri için daha az olabilir."
+    )
+
+    prompt = f"""Sen deneyimli bir mülakatçısın ve "{company_name}" şirketinin mülakat sürecine
+hazırlanıyorsun.
+
+Önce Google'ı kullanarak "{company_name}" hakkında araştırma yap: sektörü, ürün/hizmetleri,
+bilinen teknoloji yığını, mülakat süreci/tarzı (varsa Glassdoor, LinkedIn, mülakat deneyimi
+paylaşımlarından) ve şirket kültürü/değerleri. Şirket küçük veya az bilinen bir şirketse ve
+güvenilir bilgi bulamıyorsan, sektörüne ve pozisyona dayanarak makul bir yaklaşım belirle —
+bulamadığın spesifik detayları uydurma.
 
 Pozisyon: {job_title}
 İlan Özeti: {job_description[:500]}
 
 {user_context}
 
-Adayın yeteneklerine ve CV'sine atıfta bulunarak (örneğin "CV'nizde belirttiğiniz X yeteneği" diyerek) soruları kişiselleştirin.
-{type_instruction}
+Soruları hem POZİSYONA hem de adayın BÖLÜMÜNE/eğitim geçmişine göre uyarla — aynı ilana
+başvuran farklı bölümlerden iki aday (örn. Bilgisayar Mühendisliği ile Endüstri Mühendisliği)
+çok farklı teknik derinlikte sorular almalı. Mümkün olduğunda şirketin gerçek teknoloji
+yığınına/sektörüne ve adayın CV'sindeki/becerilerindeki somut noktalara atıfta bulun
+(örneğin "CV'nizde belirttiğiniz X yeteneği" diyerek).
 
-Her soru için şu JSON formatını kullan:
+{type_instruction}
+{count_instruction}
+
+Her soru için şu alanları içeren bir JSON dizisi üret:
 [
   {{
     "id": 1,
@@ -116,11 +144,11 @@ Her soru için şu JSON formatını kullan:
   }}
 ]
 
-SADECE JSON döndür, açıklama ekleme. {count} soru üret."""
+Yanıtını SADECE bu JSON dizisi olarak ver, başka açıklama ekleme."""
 
-    client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
-    questions = await _generate_json_with_retry(client, prompt, "InterviewCoach")
-    logger.info(f"[InterviewCoach] {len(questions)} soru üretildi.")
+    client = _get_client(api_key)
+    questions = await _generate_grounded_json_with_retry(client, prompt, "InterviewCoach")
+    logger.info(f"[InterviewCoach] {len(questions)} soru üretildi (şirket: {company_name}).")
     return questions
 
 

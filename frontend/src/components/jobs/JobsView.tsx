@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Briefcase, Search, MapPin, Building, Star, ExternalLink, Activity, AlertCircle } from 'lucide-react';
+import { Briefcase, Search, MapPin, Building, Star, ExternalLink, Activity, AlertCircle, Compass } from 'lucide-react';
 import CyberModal from '../ui/CyberModal';
 import Dropdown from '../ui/Dropdown';
 import * as api from '../../services/api';
@@ -342,10 +342,11 @@ function JobsView({ jobs, isLoading, onJobAction }) {
 
             <div className="flex gap-3 pt-4 border-t border-outline-variant/10 mt-2">
               <button
-                className="flex-1 py-3 px-4 bg-primary-container hover:bg-blue-700 active:scale-[0.98] text-white font-label rounded-md transition-all duration-150 text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-3 px-4 bg-primary-container hover:bg-blue-700 active:scale-[0.98] text-white font-label rounded-md transition-all duration-150 text-center disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 onClick={handlePrepare}
                 disabled={preparing}
               >
+                {preparing && <Compass className="w-4 h-4 animate-spin" />}
                 {preparing ? t('jobs_preparing') : t('jobs_prepare_application')}
               </button>
               {selectedJob.source_url && (

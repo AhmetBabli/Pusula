@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Check, Save, X, LogOut, KeyRound, ExternalLink, CheckCircle2, Pencil, Eye, EyeOff, Compass } from 'lucide-react';
+import { Mail, Check, Save, X, LogOut, KeyRound, ExternalLink, CheckCircle2, Pencil, Eye, EyeOff, Compass, Github, Linkedin } from 'lucide-react';
 import { updateProfile } from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useTour } from '../../tour/TourContext';
@@ -243,26 +243,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                     <label htmlFor="profile-graduation-year" className={labelClass}>{t('profile_graduation_year')}</label>
                     <input id="profile-graduation-year" type="number" value={formData.graduation_year ?? ''} onChange={e => setFormData({ ...formData, graduation_year: e.target.value ? parseInt(e.target.value, 10) : null })} className={inputClass} />
                   </div>
-                  <div>
-                    <label htmlFor="profile-linkedin" className={labelClass}>LinkedIn</label>
-                    <input id="profile-linkedin" type="url" value={formData.linkedin_url || ''} onChange={e => setFormData({ ...formData, linkedin_url: e.target.value })} placeholder="https://linkedin.com/in/..." className={inputClass} />
-                  </div>
-                  <div>
-                    <label htmlFor="profile-github" className={labelClass}>GitHub</label>
-                    <input id="profile-github" type="url" value={formData.github_url || ''} onChange={e => setFormData({ ...formData, github_url: e.target.value })} placeholder="https://github.com/..." className={inputClass} />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="profile-linkedin-data" className={labelClass}>{t('profile_linkedin_data_label')}</label>
-                  <p className="text-xs text-on-surface-variant mb-2 leading-relaxed">{t('profile_linkedin_data_hint')}</p>
-                  <textarea
-                    id="profile-linkedin-data"
-                    value={formData.linkedin_data || ''}
-                    onChange={e => setFormData({ ...formData, linkedin_data: e.target.value })}
-                    placeholder={t('profile_linkedin_data_placeholder')}
-                    rows={5}
-                    className={`${inputClass} resize-none font-mono text-sm`}
-                  />
                 </div>
                 <div>
                   <label htmlFor="profile-summary" className={labelClass}>{t('profile_summary')}</label>
@@ -447,6 +427,68 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                   {t('profile_gemini_key_remove')}
                 </button>
               )}
+            </div>
+
+            {/* GitHub */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mt-6 pt-6 border-t border-outline-variant/10">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Github className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-label text-sm font-semibold text-on-surface">GitHub</span>
+                <p className="text-xs text-on-surface-variant mt-0.5">{t('profile_github_desc')}</p>
+              </div>
+              <input
+                type="url"
+                value={formData.github_url || ''}
+                onChange={e => setFormData({ ...formData, github_url: e.target.value })}
+                placeholder="https://github.com/..."
+                aria-label="GitHub"
+                className="w-full sm:w-64 bg-surface-container-lowest border border-outline-variant/15 rounded-md px-3 py-2.5 font-body text-sm text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all shrink-0"
+              />
+            </div>
+
+            {/* LinkedIn */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mt-6 pt-6 border-t border-outline-variant/10">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Linkedin className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-label text-sm font-semibold text-on-surface">LinkedIn</span>
+                <p className="text-xs text-on-surface-variant mt-0.5">{t('profile_linkedin_desc')}</p>
+              </div>
+              <input
+                type="url"
+                value={formData.linkedin_url || ''}
+                onChange={e => setFormData({ ...formData, linkedin_url: e.target.value })}
+                placeholder="https://linkedin.com/in/..."
+                aria-label="LinkedIn"
+                className="w-full sm:w-64 bg-surface-container-lowest border border-outline-variant/15 rounded-md px-3 py-2.5 font-body text-sm text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all shrink-0"
+              />
+            </div>
+            <div className="mt-4 sm:pl-14">
+              <label htmlFor="profile-linkedin-data" className="font-label text-xs text-on-surface-variant block mb-2">{t('profile_linkedin_data_label')}</label>
+              <p className="text-xs text-on-surface-variant/80 mb-2 leading-relaxed">{t('profile_linkedin_data_hint')}</p>
+              <textarea
+                id="profile-linkedin-data"
+                value={formData.linkedin_data || ''}
+                onChange={e => setFormData({ ...formData, linkedin_data: e.target.value })}
+                placeholder={t('profile_linkedin_data_placeholder')}
+                rows={4}
+                className="w-full bg-surface-container-lowest border border-outline-variant/15 rounded-md px-3 py-2.5 font-mono text-sm text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="px-5 py-2.5 rounded-md bg-primary-container text-white hover:bg-blue-700 active:scale-[0.98] transition-all font-label text-sm disabled:opacity-50 flex items-center gap-2"
+              >
+                {saving && <Compass className="w-4 h-4 animate-spin" />}
+                {saving ? t('profile_saving') : t('profile_save_connections')}
+              </button>
             </div>
           </motion.section>
         </div>

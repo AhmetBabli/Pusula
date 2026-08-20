@@ -193,7 +193,10 @@ async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[i
 
         settings.CV_STORE_PATH.mkdir(parents=True, exist_ok=True)
         pdf_path = str(settings.CV_STORE_PATH / f"cv_architect_{session_id}.pdf")
-        export_cv_to_pdf(cv_markdown, pdf_path)
+        if not export_cv_to_pdf(cv_markdown, pdf_path):
+            # export_cv_to_pdf hatayı zaten loglayıp False döndürüyor — burada
+            # sessizce devam edip "başarılı" göstermek yerine gerçek hatayı yansıtıyoruz.
+            raise RuntimeError("PDF oluşturulamadı.")
 
         # DB'ye kaydet
         with SessionLocal() as db:
@@ -279,7 +282,7 @@ async def _run_strategy(session_id: str, target_job: str, target_location: str, 
             if not user: raise ValueError("Profil bulunamadı.")
             
         repos = await fetch_github_repos(user.github_url or "")
-        repo_summary = ", ".join([f"{r['name']} ({r['language']})" for r in repos[:10]])
+        repo_summary = ", ".join([f"{r['name']} ({', '.join(r.get('languages') or [])})" for r in repos[:10]])
 
         await push_agent_event(session_id, "strategy", "running", "Yol haritası ve pazar analizi oluşturuluyor...", 50)
         

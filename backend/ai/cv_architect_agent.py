@@ -165,6 +165,20 @@ Sadece CV metnini döndür, ek açıklama ekleme."""
         return "\n".join(sections)
 
 
+def _sanitize_for_pdf(text: str) -> str:
+    """Helvetica çekirdek fontu Latin-1/WinAnsi ile sınırlı — Türkçe'ye özgü
+    ı/İ/ğ/Ğ/ş/Ş karakterleri bu kümede yok ve fpdf2 bunlarla karşılaşınca sert
+    hata fırlatıp PDF üretimini tamamen çökertiyordu (Gemini'nin ürettiği her
+    gerçek Türkçe CV bu karakterlerden en az birini içerdiği için bu, PDF
+    indirmenin fiilen hiç çalışmadığı anlamına geliyordu). ç/ö/ü zaten
+    Latin-1'de olduğu için dokunulmuyor; geri kalan (beklenmeyen) karakterler
+    PDF'i çökertmek yerine sessizce '?' olur."""
+    replacements = {"ı": "i", "İ": "I", "ğ": "g", "Ğ": "G", "ş": "s", "Ş": "S"}
+    for src, dst in replacements.items():
+        text = text.replace(src, dst)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
 def export_cv_to_pdf(markdown_text: str, output_path: str) -> bool:
     """
     Markdown CV metnini PDF'e dönüştürür.
@@ -172,6 +186,9 @@ def export_cv_to_pdf(markdown_text: str, output_path: str) -> bool:
     """
     try:
         from fpdf import FPDF
+        from fpdf.enums import XPos, YPos
+
+        markdown_text = _sanitize_for_pdf(markdown_text)
 
         pdf = FPDF()
         pdf.set_auto_page_break(auto=True, margin=15)
@@ -206,12 +223,12 @@ def export_cv_to_pdf(markdown_text: str, output_path: str) -> bool:
                 # **bold** işaretlemesini temizle
                 clean = re.sub(r'\*\*(.*?)\*\*', r'\1', line[2:])
                 pdf.cell(5, 6, chr(149), ln=False)
-                pdf.multi_cell(0, 6, clean)
+                pdf.multi_cell(0, 6, clean, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             else:
                 pdf.set_font("Helvetica", "", 10)
                 pdf.set_text_color(60, 60, 60)
                 clean = re.sub(r'\*\*(.*?)\*\*', r'\1', line)
-                pdf.multi_cell(0, 6, clean)
+                pdf.multi_cell(0, 6, clean, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
         pdf.output(output_path)
         logger.info(f"[CvArchitect] PDF oluşturuldu: {output_path}")

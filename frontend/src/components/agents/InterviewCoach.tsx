@@ -59,6 +59,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [loadingEval, setLoadingEval] = useState(false);
   const [phase, setPhase] = useState<'setup' | 'interview' | 'results'>('setup');
   const [error, setError] = useState<string | null>(null);
+  const [personalized, setPersonalized] = useState(true);
 
   // Outreach Integration State
   const [outreachResult, setOutreachResult] = useState<{cold_email: string, linkedin_dm: string} | null>(null);
@@ -253,6 +254,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         round_type: roundType,
       });
       setQuestions(data.questions || []);
+      setPersonalized(data.personalized !== false);
       setCurrentIdx(0);
       setHistory([]);
       setEvaluation(null);
@@ -509,6 +511,14 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
           {q.type === 'technical' ? t('interview_technical_badge') : t('interview_cultural_badge')}
         </span>
       </div>
+
+      {!personalized && (
+        <div className="flex items-start gap-2 text-xs font-body text-on-surface-variant bg-surface-container-lowest border border-outline-variant/10 rounded-md px-3 py-2.5 mb-2">
+          <Info className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+          <span>{t('interview_fallback_notice')}</span>
+        </div>
+      )}
+
       <div className="h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
         <motion.div
           className="h-full bg-emerald-500 rounded-full"

@@ -81,6 +81,29 @@ async def _generate_grounded_json_with_retry(client: genai.Client, prompt: str, 
             raise AIServiceError(f"AI service error: {e}")
 
 
+# Gemini kotası/API'si geçici olarak kullanılamadığında düşülecek genel yedek
+# sorular — şirkete/bölüme özel değildir ama mülakat pratiğini tamamen
+# durdurmak yerine kullanıcının en azından pratik yapabilmesini sağlar.
+# Çağıran uç (routers/agents.py) bunu kullandığını "personalized: false" ile
+# açıkça belirtir, sahte bir "şirkete özel" izlenimi vermez.
+FALLBACK_QUESTIONS: list[dict] = [
+    {"id": 1, "question": "Kendinizi ve bu pozisyona neden uygun olduğunuzu kısaca anlatır mısınız?", "type": "hr", "hint": "Net, ilgili deneyim/beceriye değinen kısa bir özet."},
+    {"id": 2, "question": "Üzerinde çalıştığınız bir projeden bahseder misiniz? Karşılaştığınız en büyük zorluk neydi ve nasıl çözdünüz?", "type": "technical", "hint": "Somut bir proje, karşılaşılan problem, çözüm süreci, sonuç."},
+    {"id": 3, "question": "Bir takım içinde fikir ayrılığı yaşadığınız bir durumu nasıl yönettiniz?", "type": "hr", "hint": "Empati, iletişim, çözüm odaklılık."},
+    {"id": 4, "question": "Bu alanda kendinizi geliştirmek için hangi kaynakları/yöntemleri kullanıyorsunuz?", "type": "hr", "hint": "Öğrenme isteği, güncel kalma çabası, somut örnek."},
+    {"id": 5, "question": "Bu pozisyonda başarılı olmak için en önemli teknik beceri sizce nedir ve bu konudaki seviyenizi nasıl değerlendirirsiniz?", "type": "technical", "hint": "Öz farkındalık, somut örnek, dürüstlük."},
+    {"id": 6, "question": "Zaman baskısı altında öncelik belirlemeniz gereken bir durumu nasıl ele aldınız?", "type": "technical", "hint": "Planlama, önceliklendirme mantığı, sonuç."},
+]
+
+
+def get_fallback_questions(round_type: Literal["technical", "hr", "mixed"] = "mixed") -> list[dict]:
+    """Şirkete/bölüme özel araştırma yapılamadığında kullanılacak genel sorular."""
+    if round_type == "mixed":
+        return list(FALLBACK_QUESTIONS)
+    filtered = [q for q in FALLBACK_QUESTIONS if q["type"] == round_type]
+    return filtered or list(FALLBACK_QUESTIONS)
+
+
 async def generate_questions(
     job_title: str,
     job_description: str,

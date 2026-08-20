@@ -333,6 +333,7 @@ const translations: Translations = {
   interview_ai_speaking: { tr: 'Pusula soruyor...', en: 'Pusula is speaking...' },
   interview_ai_listening: { tr: 'Sizi dinliyorum, cevabınızı söyleyin...', en: 'Listening for your answer...' },
   interview_mic_permission_denied: { tr: 'Mikrofon izni verilmedi. Sesli sohbet için tarayıcı ayarlarından mikrofona izin verin, ya da cevabı yazarak girin.', en: 'Microphone permission was denied. Allow microphone access in your browser settings for voice chat, or type your answer instead.' },
+  interview_fallback_notice: { tr: 'Şirkete özel yapay zeka araştırması şu an yapılamadı (AI servisi geçici olarak kullanılamıyor). Genel mülakat sorularıyla devam ediyorsunuz.', en: 'Company-specific AI research is unavailable right now (the AI service is temporarily down). Continuing with general interview questions instead.' },
   interview_analyzing: { tr: 'Yanıt Analiz Ediliyor...', en: 'Analyzing Response...' },
   interview_submit_answer: { tr: 'Yanıtı Gönder', en: 'Submit Answer' },
   interview_evaluation: { tr: 'Değerlendirme', en: 'Evaluation' },

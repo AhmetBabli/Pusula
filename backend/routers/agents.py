@@ -347,8 +347,12 @@ async def interview_start(
     current_user: UserProfile = Depends(get_current_user),
 ):
     """Şirkete, pozisyona ve adayın bölümüne özel mülakat soruları üretir.
-    Soru sayısı sabit değildir — Gemini pozisyonun karmaşıklığına göre karar verir."""
-    from backend.ai.interview_coach_agent import generate_questions
+    Soru sayısı sabit değildir — Gemini pozisyonun karmaşıklığına göre karar verir.
+    AI araştırması geçici olarak kullanılamıyorsa (kota/503), mülakat pratiğini
+    tamamen durdurmak yerine genel yedek sorulara düşer ve bunu 'personalized:
+    false' ile açıkça belirtir."""
+    from backend.ai.interview_coach_agent import generate_questions, get_fallback_questions
+    from backend.exceptions import AIServiceError
 
     job_title = req.job_title
     job_desc = req.job_description
@@ -367,15 +371,22 @@ async def interview_start(
     skills_str = ", ".join(current_user.skills or [])
     user_context = f"Aday Özeti: {current_user.full_name}, Bölüm: {current_user.department}. Beceriler: {skills_str}. CV Özeti: {cv_text}"
 
-    questions = await generate_questions(
-        job_title=job_title or "Staj",
-        job_description=job_desc,
-        company_name=company or "Genel",
-        round_type=req.round_type,
-        user_context=user_context,
-        api_key=current_user.gemini_api_key,
-    )
-    return {"session_id": req.session_id, "questions": questions, "total": len(questions)}
+    try:
+        questions = await generate_questions(
+            job_title=job_title or "Staj",
+            job_description=job_desc,
+            company_name=company or "Genel",
+            round_type=req.round_type,
+            user_context=user_context,
+            api_key=current_user.gemini_api_key,
+        )
+        personalized = True
+    except AIServiceError as e:
+        logger.warning(f"[InterviewStart] AI soru üretimi başarısız, genel yedek sorulara düşülüyor: {e}")
+        questions = get_fallback_questions(req.round_type)
+        personalized = False
+
+    return {"session_id": req.session_id, "questions": questions, "total": len(questions), "personalized": personalized}
 
 
 @router.post("/interview/answer")

@@ -11,13 +11,15 @@ export interface AgentEvent {
   ts?: string;
 }
 
-export type AgentName = 'web_search' | 'cv_architect' | 'interview_coach' | 'outreach' | 'system';
+export type AgentName = 'web_search' | 'event_search' | 'cv_architect' | 'interview_coach' | 'outreach' | 'strategy' | 'system';
 
 export interface AgentStates {
   web_search: AgentEvent;
+  event_search: AgentEvent;
   cv_architect: AgentEvent;
   interview_coach: AgentEvent;
   outreach: AgentEvent;
+  strategy: AgentEvent;
 }
 
 const makeIdle = (agent: string): AgentEvent => ({
@@ -26,9 +28,11 @@ const makeIdle = (agent: string): AgentEvent => ({
 
 const INITIAL: AgentStates = {
   web_search: makeIdle('web_search'),
+  event_search: makeIdle('event_search'),
   cv_architect: makeIdle('cv_architect'),
   interview_coach: makeIdle('interview_coach'),
   outreach: makeIdle('outreach'),
+  strategy: makeIdle('strategy'),
 };
 
 /**

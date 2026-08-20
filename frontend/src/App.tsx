@@ -12,7 +12,6 @@ import { TourOverlay } from './tour/TourOverlay';
 import { Auth } from './components/auth/Auth';
 import { ProfileView, UserProfile } from './components/dashboard/ProfileView';
 import { AgentOrchestrator } from './components/agents/AgentOrchestrator';
-import { InterviewCoach } from './components/agents/InterviewCoach';
 import DashboardView from './components/dashboard/DashboardView';
 import JobsView from './components/jobs/JobsView';
 import ApplicationsView from './components/applications/ApplicationsView';
@@ -447,15 +446,7 @@ const App: React.FC = () => {
       />
     ),
     profile: <ProfileView userProfile={userProfile} onSave={setUserProfile} onLogout={handleLogout} />,
-    agents: (
-      <div className="space-y-10">
-        <AgentOrchestrator />
-        <div className="border-t border-outline-variant/10 pt-8">
-          <h3 className="text-lg font-headline font-semibold text-on-surface mb-6">{t('app_interview_simulator_label')}</h3>
-          <InterviewCoach />
-        </div>
-      </div>
-    ),
+    agents: <AgentOrchestrator />,
   };
 
   const currentState = appState;

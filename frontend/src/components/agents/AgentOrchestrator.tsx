@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, FileText, MessageSquare, Send, Terminal, Wifi, WifiOff, RotateCcw, Download, Activity, CheckCircle, AlertCircle, Mail, X } from 'lucide-react';
+import { Search, Calendar, FileText, MessageSquare, Send, Compass, Terminal, Wifi, WifiOff, RotateCcw, Download, Activity, CheckCircle, AlertCircle, Mail, X } from 'lucide-react';
 import { useAgentWebSocket, AgentStates } from '../../hooks/useAgentWebSocket';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
+import { InterviewCoach } from './InterviewCoach';
 
 // ── API Çağrıları ──────────────────────────────────────────────────────────
 const API = '/api/agents';
@@ -119,30 +120,153 @@ function AgentCard({ title, subtitle, icon: Icon, status, step, progress, onRese
   );
 }
 
+// ── Kariyer Stratejisi Sonuç Görünümü ──────────────────────────────────────
+function StrategyResults({ data, t }: { data: Record<string, any>; t: (k: string) => string }) {
+  const market = data.market_overview || {};
+  const gaps: any[] = data.skill_gap_analysis || [];
+  const roadmap: any[] = data.roadmap_6_months || [];
+  const projects: any[] = data.project_ideas || [];
+
+  return (
+    <div className="space-y-5 pt-2">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-3">
+          <div className="text-xs text-on-surface-variant">{t('agents_strategy_salary_range')}</div>
+          <div className="text-sm font-semibold text-on-surface mt-0.5">{market.salary_range || '—'}</div>
+        </div>
+        <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-3">
+          <div className="text-xs text-on-surface-variant">{t('agents_strategy_demand_level')}</div>
+          <div className="text-sm font-semibold text-on-surface mt-0.5">{market.demand_level || '—'}</div>
+        </div>
+      </div>
+
+      {Array.isArray(market.top_technologies) && market.top_technologies.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {market.top_technologies.map((tech: string, i: number) => (
+            <span key={i} className="px-2.5 py-1 rounded-md bg-primary-container/10 text-primary text-xs font-label">{tech}</span>
+          ))}
+        </div>
+      )}
+
+      {gaps.length > 0 && (
+        <div>
+          <div className="text-xs font-label font-semibold text-on-surface-variant mb-2">{t('agents_strategy_skill_gaps')}</div>
+          <ul className="space-y-1.5">
+            {gaps.map((g, i) => (
+              <li key={i} className="text-sm text-on-surface-variant">
+                <span className="text-on-surface font-medium">{g.skill}</span>
+                {g.importance ? ` (${g.importance})` : ''} — {g.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {roadmap.length > 0 && (
+        <div>
+          <div className="text-xs font-label font-semibold text-on-surface-variant mb-2">{t('agents_strategy_roadmap')}</div>
+          <div className="space-y-3">
+            {roadmap.map((r, i) => (
+              <div key={i} className="flex gap-3 text-sm">
+                <span className="shrink-0 text-primary font-mono tabular-nums w-10">{r.month}</span>
+                <div className="flex-1">
+                  <div className="text-on-surface font-medium">{r.focus}</div>
+                  {Array.isArray(r.actions) && (
+                    <ul className="text-on-surface-variant text-xs mt-1 space-y-0.5">
+                      {r.actions.map((a: string, j: number) => <li key={j}>• {a}</li>)}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {projects.length > 0 && (
+        <div>
+          <div className="text-xs font-label font-semibold text-on-surface-variant mb-2">{t('agents_strategy_project_ideas')}</div>
+          <div className="space-y-1.5">
+            {projects.map((p, i) => (
+              <div key={i} className="text-sm">
+                <span className="text-on-surface font-medium">{p.title}</span>
+                <span className="text-on-surface-variant"> — {p.description}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.final_advice && (
+        <div className="text-sm italic text-on-surface-variant border-t border-outline-variant/10 pt-4">
+          <span className="not-italic font-label font-semibold text-on-surface">{t('agents_strategy_final_advice')}: </span>
+          {data.final_advice}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Sekme Tanımları ─────────────────────────────────────────────────────────
+const TABS: { key: keyof AgentStates; icon: React.ElementType; titleKey: string }[] = [
+  { key: 'web_search', icon: Search, titleKey: 'agents_research_title' },
+  { key: 'event_search', icon: Calendar, titleKey: 'agents_events_title' },
+  { key: 'cv_architect', icon: FileText, titleKey: 'agents_cv_title' },
+  { key: 'outreach', icon: Send, titleKey: 'agents_outreach_title' },
+  { key: 'strategy', icon: Compass, titleKey: 'agents_strategy_title' },
+  { key: 'interview_coach', icon: MessageSquare, titleKey: 'agents_interview_title' },
+];
+
+const DOT_TONE: Record<string, string> = {
+  running: 'bg-primary animate-pulse',
+  done: 'bg-emerald-500',
+  failed: 'bg-error',
+};
+
 // ── Ana Bileşen ────────────────────────────────────────────────────────────
 export function AgentOrchestrator() {
   const { t } = useLanguage();
   const { agents, sessionId, connected, logs, resetAgent } = useAgentWebSocket();
+  const [activeTab, setActiveTab] = useState<keyof AgentStates>('web_search');
 
   // Web Search state
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLocation, setSearchLocation] = useState('İstanbul');
 
+  // Event Search state
+  const [eventsExpanded, setEventsExpanded] = useState(false);
+  const [eventsQuery, setEventsQuery] = useState('');
+  const [eventsLocation, setEventsLocation] = useState('İstanbul');
+
   // Outreach state
   const [outreachExpanded, setOutreachExpanded] = useState(false);
   const [outreachCompany, setOutreachCompany] = useState('');
   const [outreachResult, setOutreachResult] = useState<{ cold_email?: string; linkedin_dm?: string } | null>(null);
 
-  // CV Architect
-  const [showTerminal, setShowTerminal] = useState(false);
+  // Strategy state
+  const [strategyExpanded, setStrategyExpanded] = useState(false);
+  const [strategyTargetJob, setStrategyTargetJob] = useState('');
+  const [strategyTargetLocation, setStrategyTargetLocation] = useState('Global');
+
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showTerminal, setShowTerminal] = useState(false);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setActionError(null);
     try {
       await apiPost('/search', { query: searchQuery, location: searchLocation, session_id: sessionId });
+    } catch (err) {
+      setActionError((err as Error).message);
+    }
+  };
+
+  const handleEventSearch = async () => {
+    if (!eventsQuery.trim()) return;
+    setActionError(null);
+    try {
+      await apiPost('/search-events', { query: eventsQuery, location: eventsLocation, session_id: sessionId });
     } catch (err) {
       setActionError((err as Error).message);
     }
@@ -195,6 +319,20 @@ export function AgentOrchestrator() {
     }
   };
 
+  const handleStrategy = async () => {
+    if (!strategyTargetJob.trim()) return;
+    setActionError(null);
+    try {
+      await apiPost('/strategy', {
+        session_id: sessionId,
+        target_job: strategyTargetJob,
+        target_location: strategyTargetLocation || 'Global',
+      });
+    } catch (err) {
+      setActionError((err as Error).message);
+    }
+  };
+
   // Outreach data gelince göster
   React.useEffect(() => {
     const d = agents.outreach.data;
@@ -204,7 +342,7 @@ export function AgentOrchestrator() {
   }, [agents.outreach]);
 
   return (
-    <div className="space-y-8 max-w-[1400px] mx-auto">
+    <div className="space-y-8 max-w-[1000px] mx-auto">
       {/* Header */}
       <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -235,158 +373,272 @@ export function AgentOrchestrator() {
         )}
       </AnimatePresence>
 
-      {/* 4 Ajan Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        {/* 1. Web Search Agent */}
-        <AgentCard
-          id="web_search" title={t('agents_research_title')} subtitle={t('agents_research_subtitle')}
-          icon={Search}
-          status={agents.web_search.status} step={agents.web_search.step}
-          progress={agents.web_search.progress} data={agents.web_search.data}
-          onReset={() => { resetAgent('web_search'); setSearchExpanded(false); }}
-        >
-          {agents.web_search.status === 'idle' && !searchExpanded && (
+      {/* Sekme çubuğu */}
+      <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-2 border-b border-outline-variant/10">
+        {TABS.map(tab => {
+          const state = agents[tab.key];
+          const isActive = activeTab === tab.key;
+          const dotTone = DOT_TONE[state.status];
+          return (
             <button
-              onClick={() => setSearchExpanded(true)}
-              className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-label transition-all duration-150 ${
+                isActive
+                  ? 'bg-primary-container/10 text-primary border border-primary-container/30'
+                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest border border-transparent'
+              }`}
             >
-              {t('agents_start_button')}
+              <tab.icon className="w-4 h-4" />
+              {t(tab.titleKey)}
+              {dotTone && <span className={`w-1.5 h-1.5 rounded-full ${dotTone}`} />}
             </button>
-          )}
-          {agents.web_search.status === 'idle' && searchExpanded && (
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                autoFocus
-                className="flex-[2] bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
-                placeholder={t('agents_search_query_placeholder')}
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              />
-              <input
-                className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
-                placeholder={t('agents_location_placeholder')}
-                value={searchLocation}
-                onChange={e => setSearchLocation(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              />
-              <button
-                onClick={handleSearch}
-                disabled={!connected || !searchQuery.trim()}
-                className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
-              >
-                {t('agents_search_button')}
-              </button>
-            </div>
-          )}
-          {agents.web_search.status === 'done' && (
-            <div className="text-sm text-on-surface-variant font-body">
-              <span className="text-on-surface font-semibold font-mono tabular-nums">{(agents.web_search.data?.saved_count as number) ?? 0}</span> {t('agents_jobs_found_suffix')}
-              {' '}{t('agents_review_in')}
-              <span className="text-primary hover:underline cursor-pointer font-medium transition-colors duration-150"> {t('nav_market_analysis')}</span>.
-            </div>
-          )}
-        </AgentCard>
+          );
+        })}
+      </div>
 
-        {/* 2. CV Architect Agent */}
-        <AgentCard
-          id="cv_architect" title={t('agents_cv_title')} subtitle={t('agents_cv_subtitle')}
-          icon={FileText}
-          status={agents.cv_architect.status} step={agents.cv_architect.step}
-          progress={agents.cv_architect.progress} data={agents.cv_architect.data}
-          onReset={() => resetAgent('cv_architect')}
-        >
-          {agents.cv_architect.status === 'idle' && (
-            <button
-              onClick={handleBuildCv}
-              disabled={!connected}
-              className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+      {/* Aktif sekme içeriği */}
+      <AnimatePresence mode="wait">
+        <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+          {activeTab === 'web_search' && (
+            <AgentCard
+              id="web_search" title={t('agents_research_title')} subtitle={t('agents_research_subtitle')}
+              icon={Search}
+              status={agents.web_search.status} step={agents.web_search.step}
+              progress={agents.web_search.progress} data={agents.web_search.data}
+              onReset={() => { resetAgent('web_search'); setSearchExpanded(false); }}
             >
-              {t('agents_cv_start_button')}
-            </button>
-          )}
-          {agents.cv_architect.status === 'done' && agents.cv_architect.data?.session_id && (
-            <button
-              onClick={() => handleDownloadCv(agents.cv_architect.data.session_id as string)}
-              className="w-full flex items-center justify-center gap-2 py-3 text-sm font-label text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 active:scale-[0.98] transition-all duration-150"
-            >
-              <Download className="w-4 h-4" /> {t('agents_cv_download')}
-            </button>
-          )}
-        </AgentCard>
-
-        {/* 3. Mülakat Koçu */}
-        <AgentCard
-          id="interview_coach" title={t('agents_interview_title')} subtitle={t('agents_interview_subtitle')}
-          icon={MessageSquare}
-          status={agents.interview_coach.status} step={agents.interview_coach.step}
-          progress={agents.interview_coach.progress} data={agents.interview_coach.data}
-          onReset={() => resetAgent('interview_coach')}
-        >
-          <a
-            href="#interview"
-            className="w-full flex items-center justify-center py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
-          >
-            {t('agents_interview_open')}
-          </a>
-        </AgentCard>
-
-        {/* 4. İletişim Asistanı */}
-        <AgentCard
-          id="outreach" title={t('agents_outreach_title')} subtitle={t('agents_outreach_subtitle')}
-          icon={Send}
-          status={agents.outreach.status} step={agents.outreach.step}
-          progress={agents.outreach.progress} data={agents.outreach.data}
-          onReset={() => { resetAgent('outreach'); setOutreachResult(null); setOutreachExpanded(false); }}
-        >
-          {agents.outreach.status === 'idle' && !outreachExpanded && (
-            <button
-              onClick={() => setOutreachExpanded(true)}
-              className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
-            >
-              {t('agents_start_button')}
-            </button>
-          )}
-          {agents.outreach.status === 'idle' && outreachExpanded && (
-            <div className="flex gap-3">
-              <input
-                autoFocus
-                className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
-                placeholder={t('agents_outreach_company_placeholder')}
-                value={outreachCompany}
-                onChange={e => setOutreachCompany(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleOutreach()}
-              />
-              <button
-                onClick={handleOutreach}
-                disabled={!connected || !outreachCompany.trim()}
-                className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
-              >
-                {t('agents_outreach_generate')}
-              </button>
-            </div>
-          )}
-          {outreachResult && (
-            <div className="space-y-3 pt-2">
-              <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-4">
-                <div className="text-xs font-label font-semibold text-primary mb-2 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/> {t('agents_outreach_email_draft')}</div>
-                <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
-                  {outreachResult.cold_email}
-                </pre>
-              </div>
-              {outreachResult.linkedin_dm && (
-                <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-4">
-                  <div className="text-xs font-label font-semibold text-primary mb-2 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5"/> {t('agents_outreach_linkedin_draft')}</div>
-                  <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
-                    {outreachResult.linkedin_dm}
-                  </pre>
+              {agents.web_search.status === 'idle' && !searchExpanded && (
+                <button
+                  onClick={() => setSearchExpanded(true)}
+                  className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
+                >
+                  {t('agents_start_button')}
+                </button>
+              )}
+              {agents.web_search.status === 'idle' && searchExpanded && (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    autoFocus
+                    className="flex-[2] bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
+                    placeholder={t('agents_search_query_placeholder')}
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  />
+                  <input
+                    className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
+                    placeholder={t('agents_location_placeholder')}
+                    value={searchLocation}
+                    onChange={e => setSearchLocation(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  />
+                  <button
+                    onClick={handleSearch}
+                    disabled={!connected || !searchQuery.trim()}
+                    className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+                  >
+                    {t('agents_search_button')}
+                  </button>
                 </div>
               )}
-            </div>
+              {agents.web_search.status === 'done' && (
+                <div className="text-sm text-on-surface-variant font-body">
+                  <span className="text-on-surface font-semibold font-mono tabular-nums">{(agents.web_search.data?.saved_count as number) ?? 0}</span> {t('agents_jobs_found_suffix')}
+                  {' '}{t('agents_review_in')}
+                  <span className="text-primary hover:underline cursor-pointer font-medium transition-colors duration-150"> {t('nav_market_analysis')}</span>.
+                </div>
+              )}
+            </AgentCard>
           )}
-        </AgentCard>
-      </div>
+
+          {activeTab === 'event_search' && (
+            <AgentCard
+              id="event_search" title={t('agents_events_title')} subtitle={t('agents_events_subtitle')}
+              icon={Calendar}
+              status={agents.event_search.status} step={agents.event_search.step}
+              progress={agents.event_search.progress} data={agents.event_search.data}
+              onReset={() => { resetAgent('event_search'); setEventsExpanded(false); }}
+            >
+              {agents.event_search.status === 'idle' && !eventsExpanded && (
+                <button
+                  onClick={() => setEventsExpanded(true)}
+                  className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
+                >
+                  {t('agents_start_button')}
+                </button>
+              )}
+              {agents.event_search.status === 'idle' && eventsExpanded && (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    autoFocus
+                    className="flex-[2] bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
+                    placeholder={t('agents_search_query_placeholder')}
+                    value={eventsQuery}
+                    onChange={e => setEventsQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleEventSearch()}
+                  />
+                  <input
+                    className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
+                    placeholder={t('agents_location_placeholder')}
+                    value={eventsLocation}
+                    onChange={e => setEventsLocation(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleEventSearch()}
+                  />
+                  <button
+                    onClick={handleEventSearch}
+                    disabled={!connected || !eventsQuery.trim()}
+                    className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+                  >
+                    {t('agents_search_button')}
+                  </button>
+                </div>
+              )}
+              {agents.event_search.status === 'done' && (
+                <div className="text-sm text-on-surface-variant font-body">
+                  <span className="text-on-surface font-semibold font-mono tabular-nums">{(agents.event_search.data?.saved_count as number) ?? 0}</span> {t('agents_events_found_suffix')}
+                  {' '}{t('agents_review_in')}
+                  <span className="text-primary hover:underline cursor-pointer font-medium transition-colors duration-150"> {t('nav_events')}</span>.
+                </div>
+              )}
+            </AgentCard>
+          )}
+
+          {activeTab === 'cv_architect' && (
+            <AgentCard
+              id="cv_architect" title={t('agents_cv_title')} subtitle={t('agents_cv_subtitle')}
+              icon={FileText}
+              status={agents.cv_architect.status} step={agents.cv_architect.step}
+              progress={agents.cv_architect.progress} data={agents.cv_architect.data}
+              onReset={() => resetAgent('cv_architect')}
+            >
+              {agents.cv_architect.status === 'idle' && (
+                <button
+                  onClick={handleBuildCv}
+                  disabled={!connected}
+                  className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+                >
+                  {t('agents_cv_start_button')}
+                </button>
+              )}
+              {agents.cv_architect.status === 'done' && agents.cv_architect.data?.session_id && (
+                <button
+                  onClick={() => handleDownloadCv(agents.cv_architect.data.session_id as string)}
+                  className="w-full flex items-center justify-center gap-2 py-3 text-sm font-label text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 active:scale-[0.98] transition-all duration-150"
+                >
+                  <Download className="w-4 h-4" /> {t('agents_cv_download')}
+                </button>
+              )}
+            </AgentCard>
+          )}
+
+          {activeTab === 'outreach' && (
+            <AgentCard
+              id="outreach" title={t('agents_outreach_title')} subtitle={t('agents_outreach_subtitle')}
+              icon={Send}
+              status={agents.outreach.status} step={agents.outreach.step}
+              progress={agents.outreach.progress} data={agents.outreach.data}
+              onReset={() => { resetAgent('outreach'); setOutreachResult(null); setOutreachExpanded(false); }}
+            >
+              {agents.outreach.status === 'idle' && !outreachExpanded && (
+                <button
+                  onClick={() => setOutreachExpanded(true)}
+                  className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
+                >
+                  {t('agents_start_button')}
+                </button>
+              )}
+              {agents.outreach.status === 'idle' && outreachExpanded && (
+                <div className="flex gap-3">
+                  <input
+                    autoFocus
+                    className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
+                    placeholder={t('agents_outreach_company_placeholder')}
+                    value={outreachCompany}
+                    onChange={e => setOutreachCompany(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleOutreach()}
+                  />
+                  <button
+                    onClick={handleOutreach}
+                    disabled={!connected || !outreachCompany.trim()}
+                    className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+                  >
+                    {t('agents_outreach_generate')}
+                  </button>
+                </div>
+              )}
+              {outreachResult && (
+                <div className="space-y-3 pt-2">
+                  <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-4">
+                    <div className="text-xs font-label font-semibold text-primary mb-2 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/> {t('agents_outreach_email_draft')}</div>
+                    <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
+                      {outreachResult.cold_email}
+                    </pre>
+                  </div>
+                  {outreachResult.linkedin_dm && (
+                    <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-md p-4">
+                      <div className="text-xs font-label font-semibold text-primary mb-2 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5"/> {t('agents_outreach_linkedin_draft')}</div>
+                      <pre className="text-sm font-body text-on-surface-variant whitespace-pre-wrap leading-relaxed">
+                        {outreachResult.linkedin_dm}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </AgentCard>
+          )}
+
+          {activeTab === 'strategy' && (
+            <AgentCard
+              id="strategy" title={t('agents_strategy_title')} subtitle={t('agents_strategy_subtitle')}
+              icon={Compass}
+              status={agents.strategy.status} step={agents.strategy.step}
+              progress={agents.strategy.progress} data={agents.strategy.data}
+              onReset={() => { resetAgent('strategy'); setStrategyExpanded(false); }}
+            >
+              {agents.strategy.status === 'idle' && !strategyExpanded && (
+                <button
+                  onClick={() => setStrategyExpanded(true)}
+                  className="w-full py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] transition-all duration-150"
+                >
+                  {t('agents_start_button')}
+                </button>
+              )}
+              {agents.strategy.status === 'idle' && strategyExpanded && (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    autoFocus
+                    className="flex-[2] bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
+                    placeholder={t('agents_strategy_target_job_placeholder')}
+                    value={strategyTargetJob}
+                    onChange={e => setStrategyTargetJob(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleStrategy()}
+                  />
+                  <input
+                    className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-md px-4 py-2.5 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors duration-150"
+                    placeholder={t('agents_strategy_target_location_placeholder')}
+                    value={strategyTargetLocation}
+                    onChange={e => setStrategyTargetLocation(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleStrategy()}
+                  />
+                  <button
+                    onClick={handleStrategy}
+                    disabled={!connected || !strategyTargetJob.trim()}
+                    className="px-5 py-2.5 text-sm font-label bg-primary-container text-white rounded-md hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+                  >
+                    {t('agents_strategy_generate')}
+                  </button>
+                </div>
+              )}
+              {agents.strategy.status === 'done' && agents.strategy.data && Object.keys(agents.strategy.data).length > 0 && (
+                <StrategyResults data={agents.strategy.data} t={t} />
+              )}
+            </AgentCard>
+          )}
+
+          {activeTab === 'interview_coach' && <InterviewCoach />}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Terminal Log */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2, duration: 0.25 }} className="pt-8 border-t border-outline-variant/10">

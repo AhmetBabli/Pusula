@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Calendar, FileText, MessageSquare, Send, Compass, Terminal, Wifi, WifiOff, RotateCcw, Download, Activity, CheckCircle, AlertCircle, Mail, X } from 'lucide-react';
+import { Search, Calendar, FileText, MessageSquare, Send, Compass, Terminal, Wifi, WifiOff, RotateCcw, Download, Activity, CheckCircle, AlertCircle, Mail, X, Info } from 'lucide-react';
 import { useAgentWebSocket, AgentStates } from '../../hooks/useAgentWebSocket';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
@@ -117,6 +117,18 @@ function AgentCard({ title, subtitle, icon: Icon, status, step, progress, onRese
         {children}
       </div>
     </motion.div>
+  );
+}
+
+// ── Kısa Bilgilendirme Şeridi ───────────────────────────────────────────────
+// Her araç ne yapar/ne yapmaz sorusunun cevabı, ilk bakışta görünsün diye
+// başlığın hemen altında — sadece bir alt metin olarak değil, ayrı bir şerit.
+function ToolInfoBanner({ text }: { text: string }) {
+  return (
+    <div className="flex items-start gap-2 text-xs font-body text-on-surface-variant bg-surface-container-lowest border border-outline-variant/10 rounded-md px-3 py-2.5">
+      <Info className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+      <span>{text}</span>
+    </div>
   );
 }
 
@@ -408,6 +420,7 @@ export function AgentOrchestrator() {
               progress={agents.web_search.progress} data={agents.web_search.data}
               onReset={() => { resetAgent('web_search'); setSearchExpanded(false); }}
             >
+              <ToolInfoBanner text={t('agents_research_info')} />
               {agents.web_search.status === 'idle' && !searchExpanded && (
                 <button
                   onClick={() => setSearchExpanded(true)}
@@ -460,6 +473,7 @@ export function AgentOrchestrator() {
               progress={agents.event_search.progress} data={agents.event_search.data}
               onReset={() => { resetAgent('event_search'); setEventsExpanded(false); }}
             >
+              <ToolInfoBanner text={t('agents_events_info')} />
               {agents.event_search.status === 'idle' && !eventsExpanded && (
                 <button
                   onClick={() => setEventsExpanded(true)}
@@ -512,6 +526,7 @@ export function AgentOrchestrator() {
               progress={agents.cv_architect.progress} data={agents.cv_architect.data}
               onReset={() => resetAgent('cv_architect')}
             >
+              <ToolInfoBanner text={t('agents_cv_info')} />
               {agents.cv_architect.status === 'idle' && (
                 <button
                   onClick={handleBuildCv}
@@ -540,6 +555,7 @@ export function AgentOrchestrator() {
               progress={agents.outreach.progress} data={agents.outreach.data}
               onReset={() => { resetAgent('outreach'); setOutreachResult(null); setOutreachExpanded(false); }}
             >
+              <ToolInfoBanner text={t('agents_outreach_info')} />
               {agents.outreach.status === 'idle' && !outreachExpanded && (
                 <button
                   onClick={() => setOutreachExpanded(true)}
@@ -596,6 +612,7 @@ export function AgentOrchestrator() {
               progress={agents.strategy.progress} data={agents.strategy.data}
               onReset={() => { resetAgent('strategy'); setStrategyExpanded(false); }}
             >
+              <ToolInfoBanner text={t('agents_strategy_info')} />
               {agents.strategy.status === 'idle' && !strategyExpanded && (
                 <button
                   onClick={() => setStrategyExpanded(true)}

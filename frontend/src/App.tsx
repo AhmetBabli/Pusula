@@ -27,7 +27,7 @@ import {
   getDashboardStats, getJobs, getApplications, getEvents, updateEventStatus, getCVs, getInboxItems,
   syncJobs, syncInbox, markInboxItemRead, convertInboxItemToJob,
   prepareApplication, approveApplication, submitApplication, answerCustomQuestions,
-  findReferrals, draftFollowup, sendFollowup, markResponded, updateApplicationOutcome,
+  findReferrals, draftFollowup, sendFollowup, markResponded, updateApplicationOutcome, reviseCoverLetter,
   uploadCV, deleteCV, setDefaultCV, linkEmailAccount, getAccounts, prepareOutreach, sendOutreach,
   getProfile, getToken, logout as apiLogout,
 } from './services/api';
@@ -324,6 +324,11 @@ const App: React.FC = () => {
     await refreshApplications();
   };
 
+  const handleReviseCoverLetter = async (id: number, instruction: string) => {
+    await reviseCoverLetter(id, instruction);
+    await refreshApplications();
+  };
+
   const handleDraftFollowup = async (id: number) => {
     return draftFollowup(id);
   };
@@ -419,6 +424,7 @@ const App: React.FC = () => {
         onSubmit={handleSubmitApplication}
         onAnswerQuestions={handleAnswerQuestions}
         onFindReferrals={handleFindReferrals}
+        onReviseCoverLetter={handleReviseCoverLetter}
         onDraftFollowup={handleDraftFollowup}
         onSendFollowup={handleSendFollowup}
         onMarkResponded={handleMarkResponded}

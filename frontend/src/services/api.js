@@ -212,6 +212,13 @@ export const findReferrals = (app_id) => request(`/applications/${app_id}/find-r
   timeoutMs: 30000,
 });
 
+// ── Ön Yazıyı Sohbet Tarzı Düzenle ──
+export const reviseCoverLetter = (app_id, instruction) => request(`/applications/${app_id}/revise-cover-letter`, {
+  method: 'POST',
+  body: { instruction },
+  timeoutMs: 30000,
+});
+
 // ── Başvuru Sonrası Takip ──
 export const draftFollowup = (app_id) => request(`/applications/${app_id}/draft-followup`, {
   method: 'POST',

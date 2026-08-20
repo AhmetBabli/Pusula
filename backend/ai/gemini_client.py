@@ -337,6 +337,58 @@ Saygılarımla,
 {user_name}"""
 
 
+async def revise_cover_letter(
+    current_letter: str,
+    instruction: str,
+    job_title: str,
+    company_name: str,
+    api_key: Optional[str] = None,
+) -> str:
+    """Kullanıcının sohbet tarzı talimatına göre mevcut ön yazıyı düzenler.
+    generate_cover_letter'ın aksine hata durumunda sessizce bir şablona
+    düşmüyor — kullanıcı SPESİFİK bir değişiklik bekliyor, yanlışlıkla
+    değişmemiş/şablon bir metin dönmek burada 'başarı' değil, kafa
+    karıştırıcı bir sessiz hata olurdu. Onun yerine gerçek hatayı fırlatır,
+    çağıran uç bunu kullanıcıya olduğu gibi gösterir."""
+    prompt = f"""Sen profesyonel bir kariyer danışmanısın. Aşağıdaki motivasyon mektubunu
+kullanıcının isteğine göre düzenle.
+
+Şirket: {company_name}
+Pozisyon: {job_title}
+
+MEVCUT MEKTUP:
+{current_letter}
+
+KULLANICININ İSTEĞİ: {instruction}
+
+Kurallar:
+- Sadece istenen değişikliği yap, gerekmedikçe mektubun geri kalanını değiştirme.
+- Türkçe yaz, 250-350 kelime aralığında kal.
+- 'Sayın İnsan Kaynakları Yetkilisi,' ile başlamaya devam et.
+- Ek açıklama ekleme, sadece güncellenmiş mektup metnini yaz."""
+
+    try:
+        client = _get_client(api_key)
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=prompt),
+            timeout=30,
+        )
+        if not response or not (response.text or "").strip():
+            raise AIServiceError("Gemini modelinden boş yanıt döndü.")
+        return response.text.strip()
+
+    except asyncio.TimeoutError:
+        logger.error("Cover letter revision timeout")
+        raise KariyerTimeoutError("Cover letter revision timed out")
+
+    except AIServiceError:
+        raise
+
+    except Exception as e:
+        logger.error(f"Motivasyon mektubu düzenlenemedi: {type(e).__name__} - {e}")
+        raise AIServiceError(f"AI service error: {e}")
+
+
 async def generate_application_qa(
     job_title: str,
     company_name: str,

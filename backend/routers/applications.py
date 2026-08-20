@@ -36,6 +36,9 @@ class CustomQARequest(BaseModel):
 class SendFollowupRequest(BaseModel):
     body: str = Field(..., min_length=10)
 
+class ReviseCoverLetterRequest(BaseModel):
+    instruction: str = Field(..., min_length=3, max_length=500)
+
 class OutcomeRequest(BaseModel):
     # Kullanıcının bildirdiği gerçek sonuç — CV performans analitiğini ve
     # takip nudge'ını gerçek anlamlı veriye kavuşturur.
@@ -309,6 +312,46 @@ async def answer_custom_questions(
     db.refresh(app)
 
     return {"qa_answers": app.qa_answers}
+
+@router.post("/{app_id}/revise-cover-letter")
+@limiter.limit("20/hour")
+async def revise_cover_letter_endpoint(
+    request: Request,
+    app_id: int,
+    req: ReviseCoverLetterRequest,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Kullanıcı ön yazıyı beğenmediğinde, sohbet tarzı bir talimatla ('daha
+    resmi olsun', 'kısalt' gibi) düzenlemesini sağlar. Sadece onay bekleyen
+    (henüz gönderilmemiş) başvurularda anlamlı — onaylandıktan/gönderildikten
+    sonra mektup zaten kullanılmış demektir."""
+    from backend.ai.gemini_client import revise_cover_letter
+
+    app = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Başvuru bulunamadı")
+    if app.status != "awaiting_approval":
+        raise HTTPException(status_code=400, detail="Ön yazı sadece onay bekleyen başvurularda düzenlenebilir.")
+
+    cover = db.query(CoverLetter).filter(CoverLetter.id == app.cover_letter_id).first()
+    if not cover:
+        raise HTTPException(status_code=404, detail="Ön yazı bulunamadı")
+
+    job = db.query(Job).filter(Job.id == app.job_id).first()
+
+    updated_text = await revise_cover_letter(
+        current_letter=cover.content,
+        instruction=req.instruction,
+        job_title=job.title if job else "",
+        company_name=job.company if job else "",
+        api_key=current_user.gemini_api_key,
+    )
+    cover.content = updated_text
+    cover.version = (cover.version or 1) + 1
+    db.commit()
+
+    return {"cover_letter_full": updated_text, "version": cover.version}
 
 @router.post("/{app_id}/submit")
 @limiter.limit("10/hour")

@@ -264,6 +264,69 @@ def test_answer_questions_rejects_empty_list(client, db_session, monkeypatch):
     assert res.status_code == 422
 
 
+def test_revise_cover_letter_updates_content_and_bumps_version(client, db_session, monkeypatch):
+    from backend.models.application import CoverLetter
+
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    _mock_letter_and_email(monkeypatch, letter="Sayın İnsan Kaynakları Yetkilisi, ilk taslak.")
+
+    app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]
+
+    async def fake_revise_cover_letter(**kwargs):
+        assert kwargs["instruction"] == "daha kısa yaz"
+        assert kwargs["current_letter"] == "Sayın İnsan Kaynakları Yetkilisi, ilk taslak."
+        return "Sayın İnsan Kaynakları Yetkilisi, kısaltılmış taslak."
+
+    monkeypatch.setattr("backend.ai.gemini_client.revise_cover_letter", fake_revise_cover_letter)
+
+    res = client.post(
+        f"/api/applications/{app_id}/revise-cover-letter",
+        json={"instruction": "daha kısa yaz"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["cover_letter_full"] == "Sayın İnsan Kaynakları Yetkilisi, kısaltılmış taslak."
+    assert body["version"] == 2
+
+    app_detail = client.get("/api/applications/", headers=headers).json()
+    updated = next(a for a in app_detail if a["id"] == app_id)
+    assert updated["cover_letter_full"] == "Sayın İnsan Kaynakları Yetkilisi, kısaltılmış taslak."
+
+
+def test_revise_cover_letter_requires_awaiting_approval_status(client, db_session, monkeypatch):
+    headers = _auth_headers(client)
+    user, cv, job = _seed_cv_and_job(db_session, "apptest@example.com")
+    _mock_letter_and_email(monkeypatch)
+
+    app_id = _prepare(client, headers, job.id, cv.id).json()["application_id"]
+    client.post(f"/api/applications/{app_id}/approve", json={"approved": True}, headers=headers)
+
+    res = client.post(
+        f"/api/applications/{app_id}/revise-cover-letter",
+        json={"instruction": "daha kısa yaz"},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
+def test_revise_cover_letter_404_for_other_users_application(client, db_session, monkeypatch):
+    headers_owner = _auth_headers(client, "revise-owner@example.com")
+    headers_other = _auth_headers(client, "revise-other@example.com")
+    user, cv, job = _seed_cv_and_job(db_session, "revise-owner@example.com")
+    _mock_letter_and_email(monkeypatch)
+
+    app_id = _prepare(client, headers_owner, job.id, cv.id).json()["application_id"]
+
+    res = client.post(
+        f"/api/applications/{app_id}/revise-cover-letter",
+        json={"instruction": "daha kısa yaz"},
+        headers=headers_other,
+    )
+    assert res.status_code == 404
+
+
 def test_submit_is_rate_limited_after_ten_per_hour(client, db_session, monkeypatch):
     """Regresyon testi: /submit gerçek bir e-posta gönderir, bu yüzden bir
     istemci hatası/döngüsü aynı IP'den onlarca gerçek e-posta göndermemeli.

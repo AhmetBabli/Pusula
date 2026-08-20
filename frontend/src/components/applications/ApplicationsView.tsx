@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users, Award, CalendarCheck } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users, Award, CalendarCheck, MessageSquare, Loader2 } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 function CopyButton({ text, label }) {
@@ -24,6 +24,86 @@ function CopyButton({ text, label }) {
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       {copied ? label?.copied : label?.copy}
     </button>
+  );
+}
+
+function CoverLetterChatBox({ appId, onRevise, labels }) {
+  const [expanded, setExpanded] = useState(false);
+  const [messages, setMessages] = useState([]); // { role: 'user' | 'assistant' | 'error', text }
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSend = async () => {
+    const instruction = input.trim();
+    if (!instruction || loading) return;
+    setMessages(prev => [...prev, { role: 'user', text: instruction }]);
+    setInput('');
+    setLoading(true);
+    try {
+      await onRevise(appId, instruction);
+      setMessages(prev => [...prev, { role: 'assistant', text: labels.updated }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'error', text: err.message || labels.error }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="text-xs font-label text-primary hover:underline underline-offset-2 w-fit flex items-center gap-1.5"
+      >
+        <MessageSquare className="w-3.5 h-3.5" /> {labels.editPrompt}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10">
+      <div className="flex items-center gap-1.5 text-xs font-label font-semibold text-on-surface-variant">
+        <MessageSquare className="w-3.5 h-3.5" /> {labels.title}
+      </div>
+      {messages.length > 0 && (
+        <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              className={`text-sm px-3 py-2 rounded-md max-w-[85%] ${
+                m.role === 'user'
+                  ? 'self-end bg-primary-container/10 text-on-surface'
+                  : m.role === 'error'
+                    ? 'self-start bg-error/10 text-error'
+                    : 'self-start bg-surface-container text-on-surface-variant'
+              }`}
+            >
+              {m.text}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          placeholder={labels.placeholder}
+          disabled={loading}
+          className="flex-1 bg-surface-container border border-outline-variant/15 rounded-md px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={loading || !input.trim()}
+          className="p-2 rounded-md bg-primary-container text-white hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 transition-all shrink-0"
+          aria-label={labels.title}
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -54,8 +134,9 @@ function CustomQuestionsBox({ appId, onSubmit, labels }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs font-label text-primary hover:underline underline-offset-2 w-fit"
+        className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary-container/10 border border-primary-container/25 text-primary text-sm font-label hover:bg-primary-container/20 active:scale-[0.98] transition-all duration-150 w-fit"
       >
+        <HelpCircle className="w-4 h-4" />
         {labels.prompt}
       </button>
     );
@@ -119,9 +200,9 @@ function ReferralBox({ appId, candidates, onFind, labels, copyLabel }) {
         type="button"
         onClick={handleFind}
         disabled={loading}
-        className="text-xs font-label text-primary hover:underline underline-offset-2 w-fit flex items-center gap-1.5 disabled:opacity-50"
+        className="flex items-center gap-2 px-4 py-2.5 rounded-md bg-primary-container/10 border border-primary-container/25 text-primary text-sm font-label hover:bg-primary-container/20 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 w-fit"
       >
-        <Users className="w-3.5 h-3.5" />
+        <Users className="w-4 h-4" />
         {loading ? labels.loading : labels.prompt}
       </button>
     );
@@ -316,7 +397,7 @@ const OUTCOME_STATUS_STYLE = {
   rejected: { tone: 'bg-red-500/10 text-red-500 border-red-500/20', icon: XCircle },
 };
 
-function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnswerQuestions, onFindReferrals, onDraftFollowup, onSendFollowup, onMarkResponded, onUpdateOutcome }) {
+function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnswerQuestions, onFindReferrals, onDraftFollowup, onSendFollowup, onMarkResponded, onUpdateOutcome, onReviseCoverLetter }) {
   const { t, language } = useLanguage();
   const copyLabel = { copy: t('applications_copy'), copied: t('applications_copied') };
   const customQaLabels = {
@@ -327,6 +408,13 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
     submit: t('applications_custom_qa_submit'),
     loading: t('applications_custom_qa_loading'),
     error: t('applications_custom_qa_error'),
+  };
+  const coverLetterChatLabels = {
+    editPrompt: t('applications_cover_letter_edit_prompt'),
+    title: t('applications_cover_letter_chat_title'),
+    placeholder: t('applications_cover_letter_chat_placeholder'),
+    updated: t('applications_cover_letter_chat_updated'),
+    error: t('applications_cover_letter_chat_error'),
   };
   const referralLabels = {
     prompt: t('applications_referral_prompt'),
@@ -672,16 +760,19 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
                     </div>
 
                     {app.cover_letter_preview && (
-                      <div className="flex flex-col gap-2 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10 mt-2">
+                      <div className="flex flex-col gap-3 p-4 rounded-md bg-surface-container-lowest border border-outline-variant/10 mt-2">
                         <div className="flex items-start gap-3">
                           <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                          <p className="text-sm font-body text-on-surface-variant leading-relaxed italic flex-1">
-                            "{app.cover_letter_preview}"
+                          <p className="text-sm font-body text-on-surface-variant leading-relaxed italic flex-1 whitespace-pre-wrap">
+                            "{app.cover_letter_full || app.cover_letter_preview}"
                           </p>
                         </div>
                         <div className="flex justify-end">
                           <CopyButton text={app.cover_letter_full || app.cover_letter_preview} label={copyLabel} />
                         </div>
+                        {app.status === 'awaiting_approval' && (
+                          <CoverLetterChatBox appId={app.id} onRevise={onReviseCoverLetter} labels={coverLetterChatLabels} />
+                        )}
                       </div>
                     )}
 

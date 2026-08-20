@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, ChevronRight, RotateCcw, Loader2, Mail, CheckCircle2, AlertTriangle, Target, Search } from 'lucide-react';
+import { MessageSquare, Send, ChevronRight, RotateCcw, Loader2, Mail, CheckCircle2, AlertTriangle, Target, Search, Info } from 'lucide-react';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
 
@@ -163,6 +163,11 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
           </div>
           <h2 className="text-2xl font-headline font-semibold text-on-surface">{t('interview_setup_title')}</h2>
           <p className="text-on-surface-variant font-body">{t('interview_setup_subtitle')}</p>
+        </div>
+
+        <div className="flex items-start gap-2 text-xs font-body text-on-surface-variant bg-surface-container-lowest border border-outline-variant/10 rounded-md px-3 py-2.5">
+          <Info className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+          <span>{t('agents_interview_info')}</span>
         </div>
 
         <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 space-y-6">

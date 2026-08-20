@@ -8,7 +8,7 @@ import logging
 import asyncio
 from pathlib import Path
 from typing import Optional, Literal
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from backend.models.event import Event
 from backend.models.cv import CV
 from backend.config import settings
 from backend.auth import get_current_user
+from backend.rate_limiter import limiter
 from backend.routers.ws import push_agent_event
 from backend.routers.events import EventCreate
 
@@ -393,6 +394,25 @@ async def interview_answer(req: InterviewAnswerRequest, current_user: UserProfil
         api_key=current_user.gemini_api_key,
     )
     return {"question_id": req.question_id, "evaluation": result}
+
+
+class TtsRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+
+
+@router.post("/tts")
+@limiter.limit("60/hour")
+async def text_to_speech(
+    request: Request,
+    req: TtsRequest,
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Mülakat sorusunu sesli okumak için MP3 üretir. Uygulama genelinde tek
+    bir Google Cloud TTS anahtarı kullanılır (kullanıcı bazlı değil)."""
+    from backend.ai.tts_client import synthesize_speech
+
+    audio_bytes = await synthesize_speech(req.text)
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
 @router.post("/outreach", status_code=202)

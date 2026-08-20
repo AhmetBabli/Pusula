@@ -41,6 +41,11 @@ class Settings:
     # kalmıyor — aynı sessiz kırılma bir daha yaşanmasın diye.
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "models/gemini-flash-latest")
 
+    # Mülakat Koçu'nun sesli soru okuması için Google Cloud Text-to-Speech.
+    # Kullanıcı bazlı değil, uygulama genelinde tek bir anahtar — her öğrenciden
+    # kendi Google Cloud faturalandırmasını kurmasını istemek makul değil.
+    GOOGLE_TTS_API_KEY: str = os.getenv("GOOGLE_TTS_API_KEY", "")
+
     # Scraping
     SCRAPE_INTERVAL_HOURS: int = 6
     MAX_PAGES_PER_SCRAPE: int = 5

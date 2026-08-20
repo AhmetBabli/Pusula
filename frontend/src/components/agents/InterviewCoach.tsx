@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Target, Search, Info, Compass } from 'lucide-react';
+import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Target, Search, Info, Compass, Volume2, Mic, Square } from 'lucide-react';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
 
@@ -64,7 +64,94 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [outreachResult, setOutreachResult] = useState<{cold_email: string, linkedin_dm: string} | null>(null);
   const [loadingOutreach, setLoadingOutreach] = useState(false);
 
+  // Sesli mülakat: soruyu dinleme (TTS) + cevabı konuşarak yazdırma (STT)
+  const [speaking, setSpeaking] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [sttSupported, setSttSupported] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recognitionRef = useRef<any>(null);
+
   const sessionId = crypto.randomUUID();
+
+  const speakQuestion = async (text: string) => {
+    if (!text) return;
+    try {
+      const token = getToken() || '';
+      const res = await fetch(`${API}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return; // sesli okuma opsiyonel bir katman — başarısız olursa sessizce vazgeç, mülakatı engellemesin
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      audioRef.current?.pause();
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onplay = () => setSpeaking(true);
+      audio.onended = () => setSpeaking(false);
+      audio.onerror = () => setSpeaking(false);
+      await audio.play().catch(() => setSpeaking(false)); // tarayıcı autoplay engeli — kullanıcı manuel dinle butonuna basar
+    } catch {
+      setSpeaking(false);
+    }
+  };
+
+  // Konuşma tanıma (STT) motorunu bir kere kur — soru değiştikçe yeniden kurmaya gerek yok
+  useEffect(() => {
+    const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      setSttSupported(false);
+      return;
+    }
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'tr-TR';
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+      }
+      if (finalTranscript.trim()) {
+        setAnswer(prev => (prev ? `${prev} ${finalTranscript.trim()}` : finalTranscript.trim()));
+      }
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      try { recognition.stop(); } catch {}
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) return;
+    if (listening) {
+      recognitionRef.current.stop();
+      setListening(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setListening(true);
+      } catch {
+        // zaten çalışıyorsa start() hata fırlatır — sessizce yok say
+      }
+    }
+  };
+
+  // Yeni soru geldiğinde otomatik seslendirmeyi dene (tarayıcı engellerse buton hep orada)
+  useEffect(() => {
+    if (phase === 'interview' && questions[currentIdx]) {
+      speakQuestion(questions[currentIdx].question);
+    }
+    return () => { audioRef.current?.pause(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, currentIdx]);
 
   const generateOutreach = async () => {
     setLoadingOutreach(true);
@@ -360,7 +447,20 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         <div className="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
         <div className="flex gap-4">
           <MessageSquare className="w-6 h-6 text-primary shrink-0 mt-1" />
-          <p className="text-lg md:text-xl font-headline text-on-surface leading-relaxed font-medium">{q?.question}</p>
+          <p className="text-lg md:text-xl font-headline text-on-surface leading-relaxed font-medium flex-1">{q?.question}</p>
+          <button
+            type="button"
+            onClick={() => q && speakQuestion(q.question)}
+            className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-150 ${
+              speaking
+                ? 'bg-primary-container/15 border-primary-container/40 text-primary animate-pulse'
+                : 'bg-surface-container-highest border-outline-variant/10 text-on-surface-variant hover:text-primary hover:border-primary-container/30'
+            }`}
+            title={t('interview_listen_question')}
+            aria-label={t('interview_listen_question')}
+          >
+            <Volume2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -368,13 +468,36 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       <AnimatePresence mode="wait">
         {!evaluation ? (
           <motion.div key="answer" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4 pt-4">
-            <textarea
-              className="w-full bg-surface-container border border-outline-variant/10 rounded-lg p-5 text-base font-body text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-none transition-all duration-150"
-              rows={6}
-              placeholder={t('interview_answer_placeholder')}
-              value={answer}
-              onChange={e => setAnswer(e.target.value)}
-            />
+            <div className="relative">
+              <textarea
+                className="w-full bg-surface-container border border-outline-variant/10 rounded-lg p-5 pr-16 text-base font-body text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-none transition-all duration-150"
+                rows={6}
+                placeholder={t('interview_answer_placeholder')}
+                value={answer}
+                onChange={e => setAnswer(e.target.value)}
+              />
+              {sttSupported && (
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-150 ${
+                    listening
+                      ? 'bg-error/10 border-error/40 text-error animate-pulse'
+                      : 'bg-surface-container-highest border-outline-variant/10 text-on-surface-variant hover:text-primary hover:border-primary-container/30'
+                  }`}
+                  title={listening ? t('interview_stop_listening') : t('interview_start_listening')}
+                  aria-label={listening ? t('interview_stop_listening') : t('interview_start_listening')}
+                >
+                  {listening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
+            {listening && (
+              <div className="flex items-center gap-2 text-xs font-label text-error">
+                <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
+                {t('interview_listening_active')}
+              </div>
+            )}
             {error && (
               <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
                 <AlertTriangle className="w-4 h-4 shrink-0" />

@@ -55,6 +55,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answer, setAnswer] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [history, setHistory] = useState<{ question: Question; evaluation: Evaluation }[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -88,7 +89,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<any>(null);
   const autoSubmitPendingRef = useRef(false);
-  const submitAnswerRef = useRef<() => void>(() => {});
+  const submitAnswerRef = useRef<(answerOverride?: string) => void>(() => {});
 
   const sessionId = crypto.randomUUID();
 
@@ -165,11 +166,20 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     recognition.interimResults = true;
     recognition.onresult = (event: any) => {
       let finalTranscript = '';
+      let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+        const chunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalTranscript += chunk;
+        else interim += chunk;
       }
       if (finalTranscript.trim()) {
         setAnswer(prev => (prev ? `${prev} ${finalTranscript.trim()}` : finalTranscript.trim()));
+        setInterimTranscript('');
+      } else {
+        // Chrome çoğu zaman sonucu hiç "final" işaretlemeden bırakıyor — bu
+        // yüzden geçici (interim) metni de göstermezsek kullanıcı konuşsa
+        // bile ekranda hiçbir şey görünmüyordu.
+        setInterimTranscript(interim);
       }
       resetSilenceTimer(); // konuşma devam ettikçe "sustu" sayacını sıfırla
     };
@@ -185,10 +195,25 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     recognition.onend = () => {
       setListening(false);
       clearSilenceTimer();
-      if (autoSubmitPendingRef.current) {
-        autoSubmitPendingRef.current = false;
-        submitAnswerRef.current();
-      }
+      const shouldAutoSubmit = autoSubmitPendingRef.current;
+      autoSubmitPendingRef.current = false;
+      // Kalan interim metni kaybetmeyelim — kesinleşmemiş olsa da cevabın
+      // parçası. Otomatik gönderim varsa, tam metni (answer state'inin henüz
+      // güncellenmemiş olabileceği bu tick içinde) doğrudan hesaplayıp
+      // submitAnswer'a parametre olarak veriyoruz — state okuması stale kalabilir.
+      setInterimTranscript(prevInterim => {
+        const leftover = prevInterim.trim();
+        if (!leftover) {
+          if (shouldAutoSubmit) submitAnswerRef.current();
+          return '';
+        }
+        setAnswer(prevAnswer => {
+          const merged = prevAnswer ? `${prevAnswer} ${leftover}` : leftover;
+          if (shouldAutoSubmit) submitAnswerRef.current(merged);
+          return merged;
+        });
+        return '';
+      });
     };
     recognitionRef.current = recognition;
 
@@ -303,6 +328,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       setHistory([]);
       setEvaluation(null);
       setAnswer('');
+      setInterimTranscript('');
       setPhase('interview');
     } catch (err) {
       setError((err as Error).message);
@@ -331,8 +357,12 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     startInterview();
   };
 
-  const submitAnswer = async () => {
-    if (!answer.trim() || !questions[currentIdx]) return;
+  const submitAnswer = async (answerOverride?: string) => {
+    // Sessizlik sayacı otomatik gönderirken, o an henüz commit edilmemiş
+    // interim metni de içeren tam cevabı doğrudan parametre olarak verir —
+    // answer state'ini okumak bu durumda bir tık geriden (stale) kalabilirdi.
+    const finalAnswer = (answerOverride ?? answer).trim();
+    if (!finalAnswer || !questions[currentIdx]) return;
     autoSubmitPendingRef.current = false;
     clearSilenceTimer();
     try { recognitionRef.current?.stop(); } catch {}
@@ -346,7 +376,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         question: q.question,
         question_type: q.type,
         hint: q.hint,
-        answer,
+        answer: finalAnswer,
         company_name: company,
         job_title: title,
       });
@@ -371,6 +401,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     } else {
       setCurrentIdx(i => i + 1);
       setAnswer('');
+      setInterimTranscript('');
       setEvaluation(null);
     }
   };
@@ -675,11 +706,16 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
                 {/* Konuşma balonu: form kutusu değil, gerçek bir söyleşi gibi */}
                 <div className="flex justify-end">
                   <div className={`max-w-[90%] rounded-2xl rounded-tr-sm px-5 py-4 text-base font-body border transition-colors duration-150 ${
-                    answer
+                    answer || interimTranscript
                       ? 'bg-primary-container/15 border-primary-container/30 text-on-surface'
                       : 'bg-surface-container border-outline-variant/10 text-on-surface-variant/60 italic'
                   }`}>
-                    {answer || t('interview_voice_prompt')}
+                    {answer || interimTranscript ? (
+                      <>
+                        {answer}
+                        {interimTranscript && <span className="opacity-50 italic">{answer ? ' ' : ''}{interimTranscript}</span>}
+                      </>
+                    ) : t('interview_voice_prompt')}
                   </div>
                 </div>
 
@@ -749,7 +785,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
             )}
             <div className="flex justify-end">
               <button
-                onClick={submitAnswer}
+                onClick={() => submitAnswer()}
                 disabled={!answer.trim() || loadingEval}
                 className="flex items-center gap-2 px-6 py-3 text-sm font-label text-white bg-primary-container border border-transparent rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
               >

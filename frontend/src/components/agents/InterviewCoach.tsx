@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Info, Compass, Volume2, Mic, Square, User } from 'lucide-react';
+import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Info, Compass, Volume2, Mic, Square } from 'lucide-react';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
 import { TourMascot } from '../../tour/TourMascot';
@@ -393,6 +393,30 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const scoreColor = (s: number) =>
     s >= 75 ? 'text-emerald-500' : s >= 50 ? 'text-primary' : 'text-error';
 
+  // Maskot masanın uzak ucunda — sadece baş/omuzları görünüyor, gövdesi masa
+  // yüzeyinin arkasında kalıyor. Kullanıcı için ayrı bir avatar çizilmiyor:
+  // masanın yakın (geniş) ucu izleyicinin kendisini temsil ediyor.
+  const renderMascotStage = (mascotSize: number) => {
+    const stageWidth = mascotSize * 2;
+    const stageHeight = Math.round(mascotSize * 1.4) + 16;
+    const tableTop = Math.round(mascotSize * 0.85);
+    return (
+      <div className="relative mx-auto" style={{ width: stageWidth, height: stageHeight }}>
+        <div className={`absolute left-1/2 -translate-x-1/2 top-0 rounded-full p-2 transition-all duration-300 ${
+          speaking ? 'bg-primary-container/10 ring-2 ring-primary-container/30' : ''
+        }`}>
+          <TourMascot size={mascotSize} needleAngle={needleAngle} />
+        </div>
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 bottom-0 bg-surface-container-highest border-t-2 shadow-sm transition-all duration-300 ${
+            listening ? 'border-error/60 ring-2 ring-error/30' : 'border-primary-container/40'
+          }`}
+          style={{ top: tableTop, width: '96%', clipPath: 'polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%)' }}
+        />
+      </div>
+    );
+  };
+
   // ── Setup Phase (maskotla sohbet) ───────────────────────────────────────
   if (phase === 'setup') {
     const isResearching = setupStep === 'researching';
@@ -404,26 +428,8 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
-        {/* Masanın iki ucu: Pusula bir tarafta, sen diğer tarafta */}
-        <div className="flex items-center justify-center gap-6 md:gap-16 py-2">
-          <div className="flex flex-col items-center gap-2">
-            <div className={`rounded-full p-3 transition-all duration-300 ${
-              speaking || isResearching ? 'bg-primary-container/10 ring-2 ring-primary-container/30' : ''
-            }`}>
-              <TourMascot size={84} needleAngle={needleAngle} />
-            </div>
-            <span className="text-xs font-label font-medium text-on-surface-variant">Pusula</span>
-          </div>
-          <div className="w-10 h-px bg-outline-variant/20 md:w-16" />
-          <div className="flex flex-col items-center gap-2">
-            <div className={`w-[84px] h-[84px] rounded-full flex items-center justify-center border transition-all duration-300 ${
-              listening ? 'bg-error/10 border-error/40 ring-2 ring-error/30' : 'bg-surface-container-highest border-outline-variant/10'
-            }`}>
-              <User className="w-9 h-9 text-on-surface-variant" />
-            </div>
-            <span className="text-xs font-label font-medium text-on-surface-variant">{t('interview_user_label')}</span>
-          </div>
-        </div>
+        {/* Pusula masanın uzak ucunda oturuyor, sen (izleyici) yakın uçtasın */}
+        {renderMascotStage(96)}
 
         {/* Maskotun söylediği satır */}
         <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 relative overflow-hidden">
@@ -610,26 +616,8 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         />
       </div>
 
-      {/* Masanın iki ucu: Pusula bir tarafta, sen diğer tarafta */}
-      <div className="flex items-center justify-center gap-6 md:gap-16 py-2 mt-4">
-        <div className="flex flex-col items-center gap-2">
-          <div className={`rounded-full p-2.5 transition-all duration-300 ${
-            speaking ? 'bg-primary-container/10 ring-2 ring-primary-container/30' : ''
-          }`}>
-            <TourMascot size={72} needleAngle={needleAngle} />
-          </div>
-          <span className="text-xs font-label font-medium text-on-surface-variant">Pusula</span>
-        </div>
-        <div className="w-10 h-px bg-outline-variant/20 md:w-16" />
-        <div className="flex flex-col items-center gap-2">
-          <div className={`w-[72px] h-[72px] rounded-full flex items-center justify-center border transition-all duration-300 ${
-            listening ? 'bg-error/10 border-error/40 ring-2 ring-error/30' : 'bg-surface-container-highest border-outline-variant/10'
-          }`}>
-            <User className="w-8 h-8 text-on-surface-variant" />
-          </div>
-          <span className="text-xs font-label font-medium text-on-surface-variant">{t('interview_user_label')}</span>
-        </div>
-      </div>
+      {/* Pusula masanın uzak ucunda oturuyor, sen (izleyici) yakın uçtasın */}
+      <div className="mt-4">{renderMascotStage(76)}</div>
 
       {(speaking || listening) && (
         <div className={`flex items-center justify-center gap-2 text-xs font-label ${speaking ? 'text-primary' : 'text-error'}`}>

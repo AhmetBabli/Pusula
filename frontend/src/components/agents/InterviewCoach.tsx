@@ -82,7 +82,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
   const [sttSupported, setSttSupported] = useState(true);
-  const [micError, setMicError] = useState(false);
+  const [micErrorCode, setMicErrorCode] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<any>(null);
@@ -110,7 +110,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const startListeningAuto = () => {
     if (!recognitionRef.current || !sttSupported) return;
     autoSubmitPendingRef.current = true;
-    setMicError(false);
+    setMicErrorCode(null);
     try {
       recognitionRef.current.start();
       setListening(true);
@@ -171,8 +171,9 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     recognition.onerror = (e: any) => {
       setListening(false);
       clearSilenceTimer();
-      if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
-        setMicError(true);
+      // 'aborted' kendi stop() çağrılarımızdan gelir — gerçek bir hata değil, gösterme
+      if (e?.error && e.error !== 'aborted') {
+        setMicErrorCode(e.error);
         autoSubmitPendingRef.current = false;
       }
     };
@@ -202,7 +203,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       recognitionRef.current.stop();
       setListening(false);
     } else {
-      setMicError(false);
+      setMicErrorCode(null);
       try {
         recognitionRef.current.start();
         setListening(true);
@@ -393,26 +394,61 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const scoreColor = (s: number) =>
     s >= 75 ? 'text-emerald-500' : s >= 50 ? 'text-primary' : 'text-error';
 
+  // Web Speech API'nin ham hata kodunu (bkz. MDN SpeechRecognitionErrorEvent)
+  // anlaşılır bir Türkçe ipucuna çevirir; ham kodu da yanında gösteriyoruz ki
+  // tanımadığımız bir kod gelirse bile kullanıcı/biz teşhis edebilelim.
+  const micErrorHint = (code: string) => {
+    switch (code) {
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return t('interview_mic_error_not_allowed');
+      case 'audio-capture':
+        return t('interview_mic_error_no_device');
+      case 'network':
+        return t('interview_mic_error_network');
+      case 'no-speech':
+        return t('interview_mic_error_no_speech');
+      default:
+        return t('interview_mic_error_unknown');
+    }
+  };
+
   // Maskot masanın uzak ucunda — sadece baş/omuzları görünüyor, gövdesi masa
   // yüzeyinin arkasında kalıyor. Kullanıcı için ayrı bir avatar çizilmiyor:
   // masanın yakın (geniş) ucu izleyicinin kendisini temsil ediyor.
   const renderMascotStage = (mascotSize: number) => {
-    const stageWidth = mascotSize * 2;
-    const stageHeight = Math.round(mascotSize * 1.4) + 16;
+    const stageWidth = Math.round(mascotSize * 2.15);
+    const stageHeight = Math.round(mascotSize * 1.4) + 20;
     const tableTop = Math.round(mascotSize * 0.85);
+    const tableHeight = stageHeight - tableTop;
+    const cupW = Math.max(14, Math.round(mascotSize * 0.16));
+    const cupH = Math.round(cupW * 0.85);
+    const penLeft = stageWidth * 0.72;
+    const penTop = tableTop + tableHeight * 0.4;
     return (
       <div className="relative mx-auto" style={{ width: stageWidth, height: stageHeight }}>
+        {/* Maskot */}
         <div className={`absolute left-1/2 -translate-x-1/2 top-0 rounded-full p-2 transition-all duration-300 ${
           speaking ? 'bg-primary-container/10 ring-2 ring-primary-container/30' : ''
         }`}>
           <TourMascot size={mascotSize} needleAngle={needleAngle} />
         </div>
+
+        {/* Masa yüzeyi */}
         <div
-          className={`absolute left-1/2 -translate-x-1/2 bottom-0 bg-surface-container-highest border-t-2 shadow-sm transition-all duration-300 ${
-            listening ? 'border-error/60 ring-2 ring-error/30' : 'border-primary-container/40'
+          className={`absolute left-1/2 -translate-x-1/2 bottom-0 bg-gradient-to-b from-primary-container/35 via-primary-container/20 to-primary-container/35 border-2 shadow-md transition-all duration-300 ${
+            listening ? 'border-error/60 ring-2 ring-error/30' : 'border-primary-container/70'
           }`}
           style={{ top: tableTop, width: '96%', clipPath: 'polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%)' }}
         />
+
+        {/* Kalem kutusu — masaya küçük bir detay */}
+        <div className="absolute" style={{ left: penLeft, top: penTop, width: cupW, height: cupH * 2.2 }}>
+          <div className="absolute rounded-full bg-on-surface-variant/80" style={{ left: '8%', bottom: cupH * 0.55, width: 2, height: cupH * 1.3, transform: 'rotate(-10deg)' }} />
+          <div className="absolute rounded-full bg-secondary" style={{ left: '45%', bottom: cupH * 0.65, width: 2, height: cupH * 1.5, transform: 'rotate(4deg)' }} />
+          <div className="absolute rounded-full bg-primary" style={{ left: '75%', bottom: cupH * 0.5, width: 2, height: cupH * 1.2, transform: 'rotate(12deg)' }} />
+          <div className="absolute bottom-0 w-full rounded-b-[3px] rounded-t-sm bg-primary/80 shadow-sm" style={{ height: cupH }} />
+        </div>
       </div>
     );
   };
@@ -429,7 +465,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
         {/* Pusula masanın uzak ucunda oturuyor, sen (izleyici) yakın uçtasın */}
-        {renderMascotStage(96)}
+        {renderMascotStage(140)}
 
         {/* Maskotun söylediği satır */}
         <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 relative overflow-hidden">
@@ -617,7 +653,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       </div>
 
       {/* Pusula masanın uzak ucunda oturuyor, sen (izleyici) yakın uçtasın */}
-      <div className="mt-4">{renderMascotStage(76)}</div>
+      <div className="mt-4">{renderMascotStage(104)}</div>
 
       {(speaking || listening) && (
         <div className={`flex items-center justify-center gap-2 text-xs font-label ${speaking ? 'text-primary' : 'text-error'}`}>
@@ -682,10 +718,10 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
                 {t('interview_listening_active')}
               </div>
             )}
-            {micError && (
+            {micErrorCode && (
               <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{t('interview_mic_permission_denied')}</span>
+                <span>{micErrorHint(micErrorCode)} ({micErrorCode})</span>
               </div>
             )}
             {error && (

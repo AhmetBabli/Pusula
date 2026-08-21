@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Info, Compass, Volume2, Mic, Square } from 'lucide-react';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
-import { TourMascot } from '../../tour/TourMascot';
+import { InterviewMascotScene } from './InterviewMascotScene';
 
 interface Question {
   id: number;
@@ -413,45 +413,14 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     }
   };
 
-  // Maskot masanın uzak ucunda — sadece baş/omuzları görünüyor, gövdesi masa
-  // yüzeyinin arkasında kalıyor. Kullanıcı için ayrı bir avatar çizilmiyor:
-  // masanın yakın (geniş) ucu izleyicinin kendisini temsil ediyor.
-  const renderMascotStage = (mascotSize: number) => {
-    const stageWidth = Math.round(mascotSize * 2.15);
-    const stageHeight = Math.round(mascotSize * 1.4) + 20;
-    const tableTop = Math.round(mascotSize * 0.85);
-    const tableHeight = stageHeight - tableTop;
-    const cupW = Math.max(14, Math.round(mascotSize * 0.16));
-    const cupH = Math.round(cupW * 0.85);
-    const penLeft = stageWidth * 0.72;
-    const penTop = tableTop + tableHeight * 0.4;
-    return (
-      <div className="relative mx-auto" style={{ width: stageWidth, height: stageHeight }}>
-        {/* Maskot */}
-        <div className={`absolute left-1/2 -translate-x-1/2 top-0 rounded-full p-2 transition-all duration-300 ${
-          speaking ? 'bg-primary-container/10 ring-2 ring-primary-container/30' : ''
-        }`}>
-          <TourMascot size={mascotSize} needleAngle={needleAngle} />
-        </div>
-
-        {/* Masa yüzeyi */}
-        <div
-          className={`absolute left-1/2 -translate-x-1/2 bottom-0 bg-gradient-to-b from-primary-container/35 via-primary-container/20 to-primary-container/35 border-2 shadow-md transition-all duration-300 ${
-            listening ? 'border-error/60 ring-2 ring-error/30' : 'border-primary-container/70'
-          }`}
-          style={{ top: tableTop, width: '96%', clipPath: 'polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%)' }}
-        />
-
-        {/* Kalem kutusu — masaya küçük bir detay */}
-        <div className="absolute" style={{ left: penLeft, top: penTop, width: cupW, height: cupH * 2.2 }}>
-          <div className="absolute rounded-full bg-on-surface-variant/80" style={{ left: '8%', bottom: cupH * 0.55, width: 2, height: cupH * 1.3, transform: 'rotate(-10deg)' }} />
-          <div className="absolute rounded-full bg-secondary" style={{ left: '45%', bottom: cupH * 0.65, width: 2, height: cupH * 1.5, transform: 'rotate(4deg)' }} />
-          <div className="absolute rounded-full bg-primary" style={{ left: '75%', bottom: cupH * 0.5, width: 2, height: cupH * 1.2, transform: 'rotate(12deg)' }} />
-          <div className="absolute bottom-0 w-full rounded-b-[3px] rounded-t-sm bg-primary/80 shadow-sm" style={{ height: cupH }} />
-        </div>
-      </div>
-    );
-  };
+  // Maskot masanın uzak ucunda oturuyor — kollar masaya uzanıyor, gövdenin geri
+  // kalanı masa yüzeyinin arkasında kalıyor. Kullanıcı için ayrı bir avatar
+  // çizilmiyor: masanın yakın (geniş) ucu izleyicinin kendisini temsil ediyor.
+  const renderMascotStage = (maxWidth: number) => (
+    <div className="mx-auto" style={{ maxWidth }}>
+      <InterviewMascotScene needleAngle={needleAngle} speaking={speaking} listening={listening} />
+    </div>
+  );
 
   // ── Setup Phase (maskotla sohbet) ───────────────────────────────────────
   if (phase === 'setup') {
@@ -465,7 +434,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
         {/* Pusula masanın uzak ucunda oturuyor, sen (izleyici) yakın uçtasın */}
-        {renderMascotStage(140)}
+        {renderMascotStage(440)}
 
         {/* Maskotun söylediği satır */}
         <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 relative overflow-hidden">
@@ -653,7 +622,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       </div>
 
       {/* Pusula masanın uzak ucunda oturuyor, sen (izleyici) yakın uçtasın */}
-      <div className="mt-4">{renderMascotStage(104)}</div>
+      <div className="mt-4">{renderMascotStage(340)}</div>
 
       {(speaking || listening) && (
         <div className={`flex items-center justify-center gap-2 text-xs font-label ${speaking ? 'text-primary' : 'text-error'}`}>

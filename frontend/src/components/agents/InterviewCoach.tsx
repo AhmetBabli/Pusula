@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Target, Search, Info, Compass, Volume2, Mic, Square } from 'lucide-react';
+import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Info, Compass, Volume2, Mic, Square, User } from 'lucide-react';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
+import { TourMascot } from '../../tour/TourMascot';
 
 interface Question {
   id: number;
@@ -49,7 +50,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const { t } = useLanguage();
   const [company, setCompany] = useState(companyName);
   const [title, setTitle] = useState(jobTitle);
-  const [roundType, setRoundType] = useState<'technical' | 'hr' | 'mixed'>('mixed');
+  const roundType: 'technical' | 'hr' | 'mixed' = 'mixed';
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answer, setAnswer] = useState('');
@@ -60,6 +61,16 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [phase, setPhase] = useState<'setup' | 'interview' | 'results'>('setup');
   const [error, setError] = useState<string | null>(null);
   const [personalized, setPersonalized] = useState(true);
+
+  // Maskotla sohbet şeklinde kurulum: önce şirket, sonra bölüm/pozisyon sorulur.
+  // İkisi de dışarıdan (props) zaten geldiyse ilgili adım(lar) atlanır.
+  const [setupStep, setSetupStep] = useState<'ask_company' | 'ask_department' | 'researching'>(
+    companyName ? (jobTitle ? 'researching' : 'ask_department') : 'ask_company'
+  );
+  const [chatInput, setChatInput] = useState('');
+  const [needleAngle, setNeedleAngle] = useState(0);
+  const [researchingIdx, setResearchingIdx] = useState(0);
+  const RESEARCHING_KEYS = ['interview_researching_1', 'interview_researching_2', 'interview_researching_3'] as const;
 
   // Outreach Integration State
   const [outreachResult, setOutreachResult] = useState<{cold_email: string, linkedin_dm: string} | null>(null);
@@ -223,6 +234,50 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [evaluation]);
 
+  // Maskot, kurulum sohbetinin her adımında ilgili soruyu sesli sorar
+  useEffect(() => {
+    if (phase !== 'setup') return;
+    if (setupStep === 'ask_company') speakQuestion(t('interview_mascot_greeting'));
+    else if (setupStep === 'ask_department') speakQuestion(t('interview_mascot_ask_department'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, setupStep]);
+
+  // Şirket + pozisyon dışarıdan (props) zaten geldiyse sohbeti atlayıp direkt araştırmaya başla
+  useEffect(() => {
+    if (setupStep === 'researching') startInterview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Araştırma sırasında maskotun söylediği satırı birkaç saniyede bir değiştir
+  useEffect(() => {
+    if (!(phase === 'setup' && setupStep === 'researching' && loadingQuestions)) return;
+    setResearchingIdx(0);
+    const id = setInterval(() => {
+      setResearchingIdx(i => (i + 1) % RESEARCHING_KEYS.length);
+    }, 2400);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, setupStep, loadingQuestions]);
+
+  // Pusula iğnesi: araştırırken yavaşça döner, konuşurken hafifçe sallanır
+  useEffect(() => {
+    const isThinking = phase === 'setup' && setupStep === 'researching' && loadingQuestions;
+    if (!isThinking && !speaking) {
+      setNeedleAngle(0);
+      return;
+    }
+    let raf: number;
+    let start: number | null = null;
+    const tick = (ts: number) => {
+      if (start === null) start = ts;
+      const elapsed = ts - start;
+      setNeedleAngle(isThinking ? (elapsed / 8) % 360 : Math.sin(elapsed / 200) * 20);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [speaking, loadingQuestions, setupStep, phase]);
+
   const generateOutreach = async () => {
     setLoadingOutreach(true);
     setError(null);
@@ -241,14 +296,14 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     }
   };
 
-  const startInterview = async () => {
+  const startInterview = async (titleOverride?: string) => {
     setLoadingQuestions(true);
     setError(null);
     try {
       const data = await apiPost('/interview/start', {
         session_id: sessionId,
         company_name: company,
-        job_title: title,
+        job_title: titleOverride ?? title,
         job_description: jobDescription,
         job_id: jobId,
         round_type: roundType,
@@ -265,6 +320,26 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     } finally {
       setLoadingQuestions(false);
     }
+  };
+
+  const submitCompanyStep = () => {
+    if (!chatInput.trim()) return;
+    setCompany(chatInput.trim());
+    setChatInput('');
+    setSetupStep('ask_department');
+  };
+
+  const submitDepartmentStep = () => {
+    if (!chatInput.trim()) return;
+    const finalTitle = chatInput.trim();
+    setTitle(finalTitle);
+    setChatInput('');
+    setSetupStep('researching');
+    startInterview(finalTitle);
+  };
+
+  const retryStart = () => {
+    startInterview();
   };
 
   const submitAnswer = async () => {
@@ -318,82 +393,89 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const scoreColor = (s: number) =>
     s >= 75 ? 'text-emerald-500' : s >= 50 ? 'text-primary' : 'text-error';
 
-  // ── Setup Phase ──────────────────────────────────────────────────────────
+  // ── Setup Phase (maskotla sohbet) ───────────────────────────────────────
   if (phase === 'setup') {
+    const isResearching = setupStep === 'researching';
+    const mascotLine =
+      setupStep === 'ask_company' ? t('interview_mascot_greeting') :
+      setupStep === 'ask_department' ? t('interview_mascot_ask_department') :
+      t(RESEARCHING_KEYS[researchingIdx]);
+    const submitChatStep = () => (setupStep === 'ask_company' ? submitCompanyStep() : submitDepartmentStep());
+
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
-        <div className="flex flex-col items-center text-center space-y-2 mb-8">
-          <div className="w-16 h-16 rounded-md bg-primary-container/15 flex items-center justify-center mb-2">
-            <Target className="w-8 h-8 text-primary" />
+        {/* Masanın iki ucu: Pusula bir tarafta, sen diğer tarafta */}
+        <div className="flex items-center justify-center gap-6 md:gap-16 py-2">
+          <div className="flex flex-col items-center gap-2">
+            <div className={`rounded-full p-3 transition-all duration-300 ${
+              speaking || isResearching ? 'bg-primary-container/10 ring-2 ring-primary-container/30' : ''
+            }`}>
+              <TourMascot size={84} needleAngle={needleAngle} />
+            </div>
+            <span className="text-xs font-label font-medium text-on-surface-variant">Pusula</span>
           </div>
-          <h2 className="text-2xl font-headline font-semibold text-on-surface">{t('interview_setup_title')}</h2>
-          <p className="text-on-surface-variant font-body">{t('interview_setup_subtitle')}</p>
+          <div className="w-10 h-px bg-outline-variant/20 md:w-16" />
+          <div className="flex flex-col items-center gap-2">
+            <div className={`w-[84px] h-[84px] rounded-full flex items-center justify-center border transition-all duration-300 ${
+              listening ? 'bg-error/10 border-error/40 ring-2 ring-error/30' : 'bg-surface-container-highest border-outline-variant/10'
+            }`}>
+              <User className="w-9 h-9 text-on-surface-variant" />
+            </div>
+            <span className="text-xs font-label font-medium text-on-surface-variant">{t('interview_user_label')}</span>
+          </div>
         </div>
 
-        <div className="flex items-start gap-2 text-xs font-body text-on-surface-variant bg-surface-container-lowest border border-outline-variant/10 rounded-md px-3 py-2.5">
-          <Info className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-          <span>{t('agents_interview_info')}</span>
+        {/* Maskotun söylediği satır */}
+        <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
+          <div className="flex items-start gap-3">
+            <MessageSquare className="w-5 h-5 text-primary shrink-0 mt-1" />
+            <p className="text-base md:text-lg font-headline text-on-surface leading-relaxed font-medium">
+              {mascotLine}
+            </p>
+          </div>
         </div>
 
-        <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 space-y-6">
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="interview-company" className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_company')}</label>
-              <input
-                id="interview-company"
-                className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-md px-4 py-3 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
-                placeholder={t('interview_target_company_placeholder')}
-                value={company}
-                onChange={e => setCompany(e.target.value)}
-              />
-            </div>
+        {error && (
+          <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-            <div>
-              <label htmlFor="interview-position" className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_target_position')}</label>
-              <input
-                id="interview-position"
-                className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-md px-4 py-3 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
-                placeholder={t('interview_target_position_placeholder')}
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-              />
+        {isResearching ? (
+          error && (
+            <div className="flex justify-end">
+              <button
+                onClick={retryStart}
+                className="flex items-center gap-2 px-6 py-3 text-sm font-label text-on-surface bg-surface-container-highest border border-outline-variant/10 rounded-md hover:bg-outline-variant/10 active:scale-[0.98] transition-all duration-150"
+              >
+                <RotateCcw className="w-4 h-4" /> {t('interview_retry')}
+              </button>
             </div>
-
-            <div>
-              <label className="block text-xs font-label font-medium text-on-surface-variant mb-2">{t('interview_type_label')}</label>
-              <div className="flex gap-3">
-                {(['technical', 'hr', 'mixed'] as const).map(rt => (
-                  <button
-                    key={rt}
-                    onClick={() => setRoundType(rt)}
-                    className={`flex-1 py-3 text-sm font-label rounded-md border transition-all duration-150 active:scale-[0.98] ${
-                      roundType === rt
-                        ? 'text-primary border-primary-container/50 bg-primary-container/10'
-                        : 'text-on-surface-variant border-outline-variant/10 hover:border-outline-variant/20 hover:bg-surface-container-highest'
-                    }`}
-                  >
-                    {rt === 'technical' ? t('interview_type_technical') : rt === 'hr' ? t('interview_type_hr') : t('interview_type_mixed')}
-                  </button>
-                ))}
-              </div>
+          )
+        ) : (
+          <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-4 md:p-6">
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-surface-container-highest border border-outline-variant/10 rounded-md px-4 py-3 text-sm font-body text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors"
+                placeholder={setupStep === 'ask_company' ? t('interview_target_company_placeholder') : t('interview_target_position_placeholder')}
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') submitChatStep(); }}
+                autoFocus
+              />
+              <button
+                onClick={submitChatStep}
+                disabled={!chatInput.trim()}
+                className="px-5 py-3 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 flex items-center gap-2 shrink-0"
+                aria-label={t('interview_start')}
+              >
+                <Send className="w-4 h-4" />
+              </button>
             </div>
           </div>
-
-          {error && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm" role="alert">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <button
-            onClick={startInterview}
-            disabled={!company.trim() || loadingQuestions}
-            className="w-full py-3.5 mt-4 text-sm font-label text-white bg-primary-container rounded-md hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 flex items-center justify-center gap-2"
-          >
-            {loadingQuestions ? <><Compass className="w-4 h-4 animate-spin" /> {t('interview_preparing')}</> : t('interview_start')}
-          </button>
-        </div>
+        )}
       </motion.div>
     );
   }
@@ -484,7 +566,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
         <div className="flex justify-end pt-8">
           <button
-            onClick={() => { setPhase('setup'); setHistory([]); setQuestions([]); setOutreachResult(null); }}
+            onClick={() => { setPhase('setup'); setSetupStep('ask_company'); setChatInput(''); setHistory([]); setQuestions([]); setOutreachResult(null); }}
             className="flex items-center gap-2 px-6 py-3 text-sm font-label text-on-surface bg-surface-container-highest border border-outline-variant/10 rounded-md hover:bg-outline-variant/10 active:scale-[0.98] transition-all duration-150"
           >
             <RotateCcw className="w-4 h-4" /> {t('interview_new_simulation')}
@@ -528,15 +610,36 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         />
       </div>
 
+      {/* Masanın iki ucu: Pusula bir tarafta, sen diğer tarafta */}
+      <div className="flex items-center justify-center gap-6 md:gap-16 py-2 mt-4">
+        <div className="flex flex-col items-center gap-2">
+          <div className={`rounded-full p-2.5 transition-all duration-300 ${
+            speaking ? 'bg-primary-container/10 ring-2 ring-primary-container/30' : ''
+          }`}>
+            <TourMascot size={72} needleAngle={needleAngle} />
+          </div>
+          <span className="text-xs font-label font-medium text-on-surface-variant">Pusula</span>
+        </div>
+        <div className="w-10 h-px bg-outline-variant/20 md:w-16" />
+        <div className="flex flex-col items-center gap-2">
+          <div className={`w-[72px] h-[72px] rounded-full flex items-center justify-center border transition-all duration-300 ${
+            listening ? 'bg-error/10 border-error/40 ring-2 ring-error/30' : 'bg-surface-container-highest border-outline-variant/10'
+          }`}>
+            <User className="w-8 h-8 text-on-surface-variant" />
+          </div>
+          <span className="text-xs font-label font-medium text-on-surface-variant">{t('interview_user_label')}</span>
+        </div>
+      </div>
+
       {(speaking || listening) && (
-        <div className={`flex items-center gap-2 text-xs font-label mt-4 ${speaking ? 'text-primary' : 'text-error'}`}>
+        <div className={`flex items-center justify-center gap-2 text-xs font-label ${speaking ? 'text-primary' : 'text-error'}`}>
           <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${speaking ? 'bg-primary' : 'bg-error'}`} />
           {speaking ? t('interview_ai_speaking') : t('interview_ai_listening')}
         </div>
       )}
 
       {/* Question */}
-      <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 mt-6 relative overflow-hidden">
+      <div className="bg-surface-container border border-outline-variant/10 rounded-lg p-6 md:p-8 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
         <div className="flex gap-4">
           <MessageSquare className="w-6 h-6 text-primary shrink-0 mt-1" />

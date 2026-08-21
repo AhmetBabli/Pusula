@@ -114,8 +114,15 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     try {
       recognitionRef.current.start();
       setListening(true);
-    } catch {
-      // zaten çalışıyorsa start() hata fırlatır — sessizce yok say
+    } catch (e: any) {
+      // Sadece "zaten çalışıyor" (InvalidStateError) sessizce yok sayılır —
+      // başka bir hata (ör. tarayıcının konuşma tanıma motoru gerçekte
+      // çalışmıyorsa) daha önce burada tamamen yutuluyordu, kullanıcı hiçbir
+      // şey görmüyordu. Artık gerçek nedeni gösteriyoruz.
+      autoSubmitPendingRef.current = false;
+      if (e?.name !== 'InvalidStateError') {
+        setMicErrorCode(e?.name || 'start-failed');
+      }
     }
   };
 
@@ -207,8 +214,10 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       try {
         recognitionRef.current.start();
         setListening(true);
-      } catch {
-        // zaten çalışıyorsa start() hata fırlatır — sessizce yok say
+      } catch (e: any) {
+        if (e?.name !== 'InvalidStateError') {
+          setMicErrorCode(e?.name || 'start-failed');
+        }
       }
     }
   };
@@ -408,6 +417,8 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
         return t('interview_mic_error_network');
       case 'no-speech':
         return t('interview_mic_error_no_speech');
+      case 'start-failed':
+        return t('interview_mic_error_start_failed');
       default:
         return t('interview_mic_error_unknown');
     }

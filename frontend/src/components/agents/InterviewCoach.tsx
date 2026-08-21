@@ -69,7 +69,6 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     companyName ? (jobTitle ? 'researching' : 'ask_department') : 'ask_company'
   );
   const [chatInput, setChatInput] = useState('');
-  const [needleAngle, setNeedleAngle] = useState(0);
   const [researchingIdx, setResearchingIdx] = useState(0);
   const RESEARCHING_KEYS = ['interview_researching_1', 'interview_researching_2', 'interview_researching_3'] as const;
 
@@ -128,32 +127,28 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     }
   };
 
+  // Tarayıcının kendi ücretsiz Speech Synthesis motorunu kullanır — Google
+  // Cloud TTS anahtarı gerekmez (kullanıcı paralı kısmı şimdilik istemedi).
   const speakQuestion = (text: string): Promise<void> => {
     if (!text) return Promise.resolve();
-    return (async () => {
+    const synth = (window as any).speechSynthesis;
+    if (!synth) return Promise.resolve(); // tarayıcı desteklemiyorsa sessizce geç, STT ile sohbet devam eder
+    return new Promise<void>((resolve) => {
       try {
-        const token = getToken() || '';
-        const res = await fetch(`${API}/tts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ text }),
-        });
-        if (!res.ok) return; // sesli okuma opsiyonel bir katman — anahtar yoksa sohbet yine de STT ile devam eder
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        audioRef.current?.pause();
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        await new Promise<void>((resolve) => {
-          audio.onplay = () => setSpeaking(true);
-          audio.onended = () => { setSpeaking(false); resolve(); };
-          audio.onerror = () => { setSpeaking(false); resolve(); };
-          audio.play().catch(() => { setSpeaking(false); resolve(); }); // tarayıcı autoplay engeli — manuel dinle butonu hep orada
-        });
+        synth.cancel(); // önceki konuşma varsa kes
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'tr-TR';
+        const trVoice = synth.getVoices().find((v: any) => v.lang?.toLowerCase().startsWith('tr'));
+        if (trVoice) utterance.voice = trVoice;
+        utterance.onstart = () => setSpeaking(true);
+        utterance.onend = () => { setSpeaking(false); resolve(); };
+        utterance.onerror = () => { setSpeaking(false); resolve(); };
+        synth.speak(utterance);
       } catch {
         setSpeaking(false);
+        resolve();
       }
-    })();
+    });
   };
 
   // Konuşma tanıma (STT) motorunu bir kere kur — soru değiştikçe yeniden kurmaya gerek yok
@@ -271,25 +266,6 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, setupStep, loadingQuestions]);
-
-  // Pusula iğnesi: araştırırken yavaşça döner, konuşurken hafifçe sallanır
-  useEffect(() => {
-    const isThinking = phase === 'setup' && setupStep === 'researching' && loadingQuestions;
-    if (!isThinking && !speaking) {
-      setNeedleAngle(0);
-      return;
-    }
-    let raf: number;
-    let start: number | null = null;
-    const tick = (ts: number) => {
-      if (start === null) start = ts;
-      const elapsed = ts - start;
-      setNeedleAngle(isThinking ? (elapsed / 8) % 360 : Math.sin(elapsed / 200) * 20);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [speaking, loadingQuestions, setupStep, phase]);
 
   const generateOutreach = async () => {
     setLoadingOutreach(true);
@@ -451,7 +427,11 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
   const renderMascotStage = (maxWidth: number) => (
     <div className="mx-auto" style={{ maxWidth }}>
-      <InterviewMascotScene needleAngle={needleAngle} speaking={speaking} listening={listening} />
+      <InterviewMascotScene
+        speaking={speaking}
+        listening={listening}
+        thinking={phase === 'setup' && setupStep === 'researching' && loadingQuestions}
+      />
     </div>
   );
 

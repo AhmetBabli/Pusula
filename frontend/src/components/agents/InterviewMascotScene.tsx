@@ -109,7 +109,7 @@ export function InterviewMascotScene({ needleAngle = 0, speaking = false, listen
       ))}
 
       {/* Sandalye sırtı */}
-      <rect x="322" y="148" width="156" height="235" rx="20" fill="none" stroke="rgb(var(--color-on-surface-variant))" strokeWidth="2" opacity="0.45" />
+      <rect x="305" y="150" width="190" height="200" rx="28" fill="none" stroke="rgb(var(--color-on-surface-variant))" strokeWidth="2" opacity="0.4" />
 
       {/* Konuşurken başın etrafında yumuşak bir nabız */}
       {speaking && (
@@ -119,12 +119,17 @@ export function InterviewMascotScene({ needleAngle = 0, speaking = false, listen
         </circle>
       )}
 
-      {/* Maskot: masaya uzanan kollar + gövde + baş */}
-      <path d="M355,300 Q328,338 363,366 L400,373 L400,338 Z" fill="rgb(var(--color-primary))" opacity="0.92" />
-      <path d="M445,300 Q472,338 437,366 L400,373 L400,338 Z" fill="rgb(var(--color-primary))" opacity="0.92" />
-      <path d="M345,233 L400,218 L455,233 L471,300 L400,321 L329,300 Z" fill="rgb(var(--color-primary))" />
-      <path d="M382,220 L400,235 L418,220 L410,233 L400,226 L390,233 Z" fill="rgb(var(--color-surface))" />
-      <path d="M393,231 L407,231 L402,300 L398,300 Z" fill="rgb(var(--color-primary-container))" />
+      {/* Maskot: masaya uzanan kollar (yuvarlak uçlu kalın çizgiler, elleri temsil eden dairelerle) */}
+      <path d="M350,246 Q312,285 330,344" fill="none" stroke="rgb(var(--color-primary))" strokeWidth="26" strokeLinecap="round" />
+      <path d="M450,246 Q488,285 470,344" fill="none" stroke="rgb(var(--color-primary))" strokeWidth="26" strokeLinecap="round" />
+      <circle cx="330" cy="346" r="15" fill="rgb(var(--color-primary))" />
+      <circle cx="470" cy="346" r="15" fill="rgb(var(--color-primary))" />
+
+      {/* Gövde: yuvarlak omuzlu ceket, masa çizgisine kadar iniyor */}
+      <path d="M336,232 Q336,220 350,222 L450,222 Q464,220 464,232 L470,300 L456,345 L344,345 L330,300 Z" fill="rgb(var(--color-primary))" />
+      <path d="M380,222 L400,238 L420,222 L412,230 L400,222 L388,230 Z" fill="rgb(var(--color-surface))" />
+      <path d="M393,230 L407,230 L402,338 L398,338 Z" fill="rgb(var(--color-primary-container))" />
+
       <circle cx="400" cy="185" r="48" fill="rgb(var(--color-surface))" stroke="rgb(var(--color-primary))" strokeWidth="3.5" />
       <g style={{ transformOrigin: '400px 185px', transform: `rotate(${needleAngle}deg)` }}>
         <path d="M386,185 L414,185 L400,143 Z" fill="rgb(var(--color-primary))" />

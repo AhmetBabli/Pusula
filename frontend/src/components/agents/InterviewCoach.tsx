@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Info, Compass, Volume2, Mic, Square } from 'lucide-react';
+import { MessageSquare, Send, ChevronRight, RotateCcw, Mail, CheckCircle2, AlertTriangle, Info, Compass, Volume2, Mic, Square, X, Keyboard } from 'lucide-react';
 import { useLanguage, translateStatic } from '../../i18n/LanguageContext';
 import { getToken } from '../../services/api';
 import { InterviewMascotScene } from './InterviewMascotScene';
@@ -25,6 +25,7 @@ interface InterviewCoachProps {
   jobTitle?: string;
   jobDescription?: string;
   jobId?: number;
+  onExitRoom?: () => void;
 }
 
 const API = '/api/agents';
@@ -46,7 +47,7 @@ async function apiPost(path: string, body: object) {
   return data;
 }
 
-export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription = '', jobId }: InterviewCoachProps) {
+export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription = '', jobId, onExitRoom }: InterviewCoachProps) {
   const { t } = useLanguage();
   const [company, setCompany] = useState(companyName);
   const [title, setTitle] = useState(jobTitle);
@@ -83,6 +84,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const [listening, setListening] = useState(false);
   const [sttSupported, setSttSupported] = useState(true);
   const [micErrorCode, setMicErrorCode] = useState<string | null>(null);
+  const [textInputMode, setTextInputMode] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<any>(null);
@@ -159,6 +161,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognitionCtor) {
       setSttSupported(false);
+      setTextInputMode(true); // mikrofon hiç yoksa direkt yazma moduna düş
       return;
     }
     const recognition = new SpeechRecognitionCtor();
@@ -427,6 +430,25 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   // Maskot masanın uzak ucunda oturuyor — kollar masaya uzanıyor, gövdenin geri
   // kalanı masa yüzeyinin arkasında kalıyor. Kullanıcı için ayrı bir avatar
   // çizilmiyor: masanın yakın (geniş) ucu izleyicinin kendisini temsil ediyor.
+  // Mülakat "odası": sidebar/başlık kayboluyor, sahne tüm ekranı kaplıyor —
+  // gerçekten bir odaya girmiş gibi. Çıkmak için sağ üstte bir X butonu var.
+  const renderRoomShell = (content: React.ReactNode) => (
+    <div className="fixed inset-0 z-50 bg-surface overflow-y-auto">
+      <button
+        type="button"
+        onClick={() => onExitRoom?.()}
+        className="fixed top-4 right-4 z-10 w-10 h-10 rounded-full bg-surface-container border border-outline-variant/10 flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors duration-150"
+        title={t('interview_exit_room')}
+        aria-label={t('interview_exit_room')}
+      >
+        <X className="w-5 h-5" />
+      </button>
+      <div className="min-h-full flex items-center justify-center p-6 md:p-10">
+        {content}
+      </div>
+    </div>
+  );
+
   const renderMascotStage = (maxWidth: number) => (
     <div className="mx-auto" style={{ maxWidth }}>
       <InterviewMascotScene needleAngle={needleAngle} speaking={speaking} listening={listening} />
@@ -442,8 +464,8 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       t(RESEARCHING_KEYS[researchingIdx]);
     const submitChatStep = () => (setupStep === 'ask_company' ? submitCompanyStep() : submitDepartmentStep());
 
-    return (
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
+    return renderRoomShell(
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl w-full mx-auto space-y-6">
         {/* Pusula masanın uzak ucunda oturuyor, sen (izleyici) yakın uçtasın */}
         {renderMascotStage(440)}
 
@@ -588,7 +610,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
         <div className="flex justify-end pt-8">
           <button
-            onClick={() => { setPhase('setup'); setSetupStep('ask_company'); setChatInput(''); setHistory([]); setQuestions([]); setOutreachResult(null); }}
+            onClick={() => { setPhase('setup'); setSetupStep('ask_company'); setChatInput(''); setHistory([]); setQuestions([]); setOutreachResult(null); if (sttSupported) setTextInputMode(false); }}
             className="flex items-center gap-2 px-6 py-3 text-sm font-label text-on-surface bg-surface-container-highest border border-outline-variant/10 rounded-md hover:bg-outline-variant/10 active:scale-[0.98] transition-all duration-150"
           >
             <RotateCcw className="w-4 h-4" /> {t('interview_new_simulation')}
@@ -600,8 +622,8 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
   // ── Interview Phase ──────────────────────────────────────────────────────
   const q = questions[currentIdx];
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-3xl mx-auto space-y-6" id="interview">
+  return renderRoomShell(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-3xl w-full mx-auto space-y-6" id="interview">
       {/* Progress */}
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-label font-medium text-on-surface-variant">
@@ -668,34 +690,69 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
       <AnimatePresence mode="wait">
         {!evaluation ? (
           <motion.div key="answer" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4 pt-4">
-            <div className="relative">
-              <textarea
-                className="w-full bg-surface-container border border-outline-variant/10 rounded-lg p-5 pr-16 text-base font-body text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-none transition-all duration-150"
-                rows={6}
-                placeholder={t('interview_answer_placeholder')}
-                value={answer}
-                onChange={e => setAnswer(e.target.value)}
-              />
-              {sttSupported && (
-                <button
-                  type="button"
-                  onClick={toggleListening}
-                  className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-150 ${
-                    listening
-                      ? 'bg-error/10 border-error/40 text-error animate-pulse'
-                      : 'bg-surface-container-highest border-outline-variant/10 text-on-surface-variant hover:text-primary hover:border-primary-container/30'
-                  }`}
-                  title={listening ? t('interview_stop_listening') : t('interview_start_listening')}
-                  aria-label={listening ? t('interview_stop_listening') : t('interview_start_listening')}
-                >
-                  {listening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </button>
-              )}
-            </div>
-            {listening && (
-              <div className="flex items-center gap-2 text-xs font-label text-error">
-                <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
-                {t('interview_listening_active')}
+            {!textInputMode ? (
+              <>
+                {/* Konuşma balonu: form kutusu değil, gerçek bir söyleşi gibi */}
+                <div className="flex justify-end">
+                  <div className={`max-w-[90%] rounded-2xl rounded-tr-sm px-5 py-4 text-base font-body border transition-colors duration-150 ${
+                    answer
+                      ? 'bg-primary-container/15 border-primary-container/30 text-on-surface'
+                      : 'bg-surface-container border-outline-variant/10 text-on-surface-variant/60 italic'
+                  }`}>
+                    {answer || t('interview_voice_prompt')}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-3 py-2">
+                  <button
+                    type="button"
+                    onClick={toggleListening}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-150 active:scale-95 ${
+                      listening
+                        ? 'bg-error/10 border-error/50 text-error animate-pulse'
+                        : 'bg-primary-container/10 border-primary-container/40 text-primary hover:bg-primary-container/20'
+                    }`}
+                    title={listening ? t('interview_stop_listening') : t('interview_start_listening')}
+                    aria-label={listening ? t('interview_stop_listening') : t('interview_start_listening')}
+                  >
+                    {listening ? <Square className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                  </button>
+                  {listening && (
+                    <div className="flex items-center gap-2 text-xs font-label text-error">
+                      <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
+                      {t('interview_listening_active')}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setTextInputMode(true)}
+                    className="flex items-center gap-1.5 text-xs font-label text-on-surface-variant hover:text-on-surface underline underline-offset-2"
+                  >
+                    <Keyboard className="w-3.5 h-3.5" /> {t('interview_switch_to_typing')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative">
+                  <textarea
+                    className="w-full bg-surface-container border border-outline-variant/10 rounded-lg p-5 text-base font-body text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-none transition-all duration-150"
+                    rows={6}
+                    placeholder={t('interview_answer_placeholder')}
+                    value={answer}
+                    onChange={e => setAnswer(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                {sttSupported && (
+                  <button
+                    type="button"
+                    onClick={() => setTextInputMode(false)}
+                    className="flex items-center gap-1.5 text-xs font-label text-on-surface-variant hover:text-on-surface underline underline-offset-2"
+                  >
+                    <Mic className="w-3.5 h-3.5" /> {t('interview_switch_to_voice')}
+                  </button>
+                )}
               </div>
             )}
             {micErrorCode && (
@@ -765,3 +822,4 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     </motion.div>
   );
 }
+

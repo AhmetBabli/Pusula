@@ -454,7 +454,7 @@ const App: React.FC = () => {
     ),
     profile: <ProfileView userProfile={userProfile} onSave={setUserProfile} onLogout={handleLogout} />,
     agents: <AgentOrchestrator />,
-    interview: <InterviewCoach />,
+    interview: <InterviewCoach onExitRoom={() => setTab('dashboard')} />,
   };
 
   const currentState = appState;

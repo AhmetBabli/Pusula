@@ -1,6 +1,7 @@
 """
 Kullanıcı profili (users router) testleri.
 """
+from sqlalchemy import text
 from backend.tests.conftest import register_and_login
 
 
@@ -103,3 +104,24 @@ def test_update_profile_persists_work_experiences_and_certificates(client):
     profile = client.get("/api/users/profile", headers=headers).json()
     assert profile["work_experiences"] == work_experiences
     assert profile["certificates"] == certificates
+
+
+def test_get_profile_handles_legacy_null_list_columns(client, db_engine):
+    """work_experiences/certificates ALTER TABLE ile sonradan eklendiğinde var
+    olan satırlarda NULL kalır (SQLAlchemy'nin Column(default=list)'i sadece
+    ORM'in kendi INSERT'inde devreye girer) — bu gerçek bir hesapta /profile'ı
+    500 ResponseValidationError ile kırmıştı. NULL geldiğinde boş listeye
+    düşülmeli, hataya değil."""
+    headers = _auth_headers(client, "profile-legacy-null@example.com")
+
+    with db_engine.connect() as conn:
+        conn.execute(
+            text("UPDATE user_profiles SET work_experiences = NULL, certificates = NULL WHERE email = :email"),
+            {"email": "profile-legacy-null@example.com"},
+        )
+        conn.commit()
+
+    res = client.get("/api/users/profile", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["work_experiences"] == []
+    assert res.json()["certificates"] == []

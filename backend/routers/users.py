@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.user import UserProfile
 from backend.auth import get_current_user
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional, Dict, Any
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -49,6 +49,18 @@ class UserProfileOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    # SQLAlchemy'nin Column(JSON, default=list)'i sadece ORM ÜZERİNDEN
+    # oluşturulan YENİ satırlarda geçerli — `ALTER TABLE ... ADD COLUMN` ile
+    # sonradan eklenen bir sütun, var olan satırlarda NULL kalır (bu tam
+    # olarak work_experiences/certificates eklenince yaşandı: eski hesaplar
+    # için None geldi, ResponseValidationError ile /profile ucu 500 verdi).
+    # Bu doğrulayıcı None'ı sessizce boş listeye çevirip aynı sınıf hatanın
+    # gelecekte başka bir liste alanında tekrarlanmasını da engelliyor.
+    @field_validator("target_sectors", "skills", "languages", "work_experiences", "certificates", mode="before")
+    @classmethod
+    def _none_to_empty_list(cls, v):
+        return v if v is not None else []
 
 @router.get("/profile", response_model=UserProfileOut)
 def get_profile(current_user: UserProfile = Depends(get_current_user)):

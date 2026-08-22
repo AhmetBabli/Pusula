@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, MapPin, Clock, ExternalLink, Heart, BadgeCheck, CheckCircle2, X, Search, Compass, AlertCircle } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAgentWebSocket } from '../../hooks/useAgentWebSocket';
-import { getToken } from '../../services/api';
+import { searchEvents } from '../../services/api';
 
 const EVENT_TYPE_KEYS = {
   hackathon: 'events_type_hackathon',
@@ -77,6 +77,7 @@ function EventsView({ events, isLoading, onUpdateStatus, onEventsFound }) {
   const { agents, sessionId, connected } = useAgentWebSocket();
   const [query, setQuery] = useState('');
   const [location, setLocation] = useState('İstanbul');
+  const [searchError, setSearchError] = useState(null);
   const search = agents.event_search;
 
   useEffect(() => {
@@ -88,12 +89,12 @@ function EventsView({ events, isLoading, onUpdateStatus, onEventsFound }) {
 
   const handleSearch = async () => {
     if (!query.trim() || search.status === 'running') return;
-    const token = getToken() || '';
-    await fetch('/api/agents/search-events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ query, location, session_id: sessionId }),
-    });
+    setSearchError(null);
+    try {
+      await searchEvents(query, location, sessionId);
+    } catch (err) {
+      setSearchError(err.message || t('events_search_error_fallback'));
+    }
   };
 
   const containerVariants = {
@@ -154,6 +155,12 @@ function EventsView({ events, isLoading, onUpdateStatus, onEventsFound }) {
         </div>
       </motion.div>
 
+      {searchError && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {searchError}
+        </div>
+      )}
       {search.status === 'failed' && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-error/10 border border-error/20 text-error text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />

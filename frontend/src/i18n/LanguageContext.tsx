@@ -174,6 +174,7 @@ const translations: Translations = {
   events_search_query_placeholder: { tr: 'Ara (örn. hackathon)', en: 'Search (e.g. hackathon)' },
   events_search_button: { tr: 'Etkinlik Ara', en: 'Search Events' },
   events_searching: { tr: 'Aranıyor...', en: 'Searching...' },
+  events_search_error_fallback: { tr: 'Arama başlatılamadı, lütfen tekrar deneyin.', en: 'Could not start the search, please try again.' },
   events_status_found: { tr: 'Yeni', en: 'New' },
   events_status_interested: { tr: 'İlgileniyorum', en: 'Interested' },
   events_status_registered: { tr: 'Kayıt Oldum', en: 'Registered' },

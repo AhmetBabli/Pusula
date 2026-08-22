@@ -134,6 +134,10 @@ export const getApplications = (status) => request('/applications/', {
 // syncJobs artık { task_id, status } döndürüyor — useTaskStream ile SSE takibi yap
 export const syncJobs = () => request('/jobs/sync', { method: 'POST' });
 export const syncInbox = () => request('/inbox/sync', { method: 'POST' });
+export const searchEvents = (query, location, session_id) => request('/agents/search-events', {
+  method: 'POST',
+  body: { query, location, session_id }
+});
 export const markInboxItemRead = (item_id) => request(`/inbox/items/${item_id}/read`, { method: 'PATCH' });
 export const convertInboxItemToJob = (item_id) => request(`/inbox/items/${item_id}/convert-to-job`, { method: 'POST' });
 export const linkEmailAccount = (email, app_password) => request('/inbox/accounts', {

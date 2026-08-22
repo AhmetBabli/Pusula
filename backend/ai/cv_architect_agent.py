@@ -4,6 +4,7 @@ GitHub API → repo analizi → ATS-uyumlu CV üretimi → PDF export.
 Pure Python, sistem bağımlılığı yok (fpdf2 kullanır).
 """
 import re
+import asyncio
 import logging
 from typing import Optional
 import httpx
@@ -34,6 +35,15 @@ async def fetch_github_repos(github_url: str) -> list[dict]:
     username = match.group(1)
     logger.info(f"[CvArchitect] GitHub repoları çekiliyor: {username}")
 
+    async def _fetch_languages(client: httpx.AsyncClient, languages_url: str) -> list[str]:
+        try:
+            lang_resp = await client.get(languages_url, headers=HEADERS)
+            if lang_resp.status_code == 200:
+                return list(lang_resp.json().keys())
+        except Exception:
+            pass
+        return []
+
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
@@ -42,30 +52,25 @@ async def fetch_github_repos(github_url: str) -> list[dict]:
                 params={"sort": "updated", "per_page": 10},
             )
             resp.raise_for_status()
-            repos_raw = resp.json()
+            repos_raw = [r for r in resp.json() if not r.get("fork")]  # Fork'ları atla — asıl çalışmalar burada
 
-        enriched = []
-        for repo in repos_raw:
-            if repo.get("fork"):
-                continue  # Fork'ları atla — asıl çalışmalar burada
-            # Dil dağılımını çek
-            langs = []
-            try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    lang_resp = await client.get(repo["languages_url"], headers=HEADERS)
-                    if lang_resp.status_code == 200:
-                        langs = list(lang_resp.json().keys())
-            except Exception:
-                pass
+            # Her repo için ayrı bir AsyncClient açıp sırayla (N sıralı round-trip)
+            # bekletmek yerine, tek client üzerinden hepsini paralel çekiyoruz.
+            languages_per_repo = await asyncio.gather(
+                *(_fetch_languages(client, repo["languages_url"]) for repo in repos_raw)
+            )
 
-            enriched.append({
+        enriched = [
+            {
                 "name": repo["name"],
                 "description": repo.get("description") or "",
                 "stars": repo.get("stargazers_count", 0),
                 "languages": langs,
                 "url": repo["html_url"],
                 "topics": repo.get("topics", []),
-            })
+            }
+            for repo, langs in zip(repos_raw, languages_per_repo)
+        ]
 
         logger.info(f"[CvArchitect] {len(enriched)} repo analiz edildi.")
         return enriched

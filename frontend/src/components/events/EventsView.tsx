@@ -103,7 +103,7 @@ function EventsView({ events, isLoading, onUpdateStatus, onEventsFound }) {
 
   const itemVariants = {
     hidden: { opacity: 0, y: 10 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }
+    show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" as const } }
   };
 
   return (
@@ -163,7 +163,7 @@ function EventsView({ events, isLoading, onUpdateStatus, onEventsFound }) {
       {search.status === 'done' && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span className="font-semibold tabular-nums">{search.data?.saved_count ?? 0}</span> {t('agents_events_found_suffix')}
+          <span className="font-semibold tabular-nums">{Number(search.data?.saved_count ?? 0)}</span> {t('agents_events_found_suffix')}
         </div>
       )}
 

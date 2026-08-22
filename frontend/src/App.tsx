@@ -32,8 +32,8 @@ import {
   uploadCV, deleteCV, setDefaultCV, linkEmailAccount, getAccounts, prepareOutreach, sendOutreach,
   getProfile, getToken, logout as apiLogout,
 } from './services/api';
+import type { Tab } from './types/tab';
 
-type Tab = 'dashboard' | 'jobs' | 'applications' | 'events' | 'cv' | 'inbox' | 'profile' | 'agents' | 'interview';
 type AppState = 'loading' | 'onboarding' | 'auth' | 'intake' | 'dashboard';
 
 // Sıra, Navigation.tsx'in sabit 7 bölümüyle (Dashboard/Pazar Analizi/Başvurular/

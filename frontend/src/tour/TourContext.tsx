@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { TOUR_STEPS, TOUR_STORAGE_KEY, TourStep } from './tourSteps';
-
-type Tab = 'dashboard' | 'jobs' | 'applications' | 'events' | 'cv' | 'inbox' | 'agents';
+import type { Tab } from '../types/tab';
 
 interface TourContextValue {
   active: boolean;

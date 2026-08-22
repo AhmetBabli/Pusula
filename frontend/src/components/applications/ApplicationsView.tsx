@@ -31,7 +31,7 @@ function CopyButton({ text, label }) {
 // düzenleme) tek satırlık küçük bir link gibi görünmesin diye — ikon rozeti +
 // başlık + kısa açıklama + gerçek bir buton içeren, kendi başına bir "özellik
 // kartı" gibi duran ortak bir bileşen.
-function FeaturePrompt({ icon: Icon, title, description, actionLabel, onAction, loading }) {
+function FeaturePrompt({ icon: Icon, title, description, actionLabel, onAction, loading = false }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-md bg-primary-container/5 border border-primary-container/20">
       <div className="flex items-start gap-3">
@@ -542,7 +542,7 @@ function ApplicationsView({ applications, isLoading, onApprove, onSubmit, onAnsw
 
   const itemVariants = {
     hidden: { opacity: 0, y: 10 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }
+    show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" as const } }
   };
 
   return (

@@ -29,7 +29,7 @@ function ErrorFallback({ error, errorInfo, onReset }: {
           {t('error_boundary_desc')}
         </p>
 
-        {process.env.NODE_ENV === 'development' && error && (
+        {import.meta.env.DEV && error && (
           <div className="mb-6 text-left">
             <details className="text-sm">
               <summary className="cursor-pointer text-on-surface-variant hover:text-on-surface font-semibold mb-2">

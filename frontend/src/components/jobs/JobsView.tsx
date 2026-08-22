@@ -36,7 +36,27 @@ const cityFromLocation = (location) => {
 // Tüm ilanlar tek seferde DOM'a basılmasın diye sayfa sayfa gösteriyoruz.
 const JOBS_PAGE_SIZE = 20;
 
-function JobsView({ jobs, isLoading, onJobAction }) {
+interface Job {
+  id: number;
+  title?: string;
+  company?: string;
+  location?: string;
+  source?: string;
+  status?: string;
+  job_type?: string;
+  deadline?: string | null;
+  match_score?: number;
+  is_favorite?: boolean;
+  [key: string]: any; // backend'in döndürdüğü diğer alanlar (açıklama, eşleşme detayı vb.)
+}
+
+interface JobsViewProps {
+  jobs: Job[];
+  isLoading: boolean;
+  onJobAction: (action: string, jobId: number) => Promise<void>;
+}
+
+function JobsView({ jobs, isLoading, onJobAction }: JobsViewProps) {
   const { t } = useLanguage();
   const jobTypeLabel = (jobType) => (jobType && JOB_TYPE_KEYS[jobType] ? t(JOB_TYPE_KEYS[jobType]) : jobType);
   const statusLabel = (status) => (status && STATUS_KEYS[status] ? t(STATUS_KEYS[status]) : status);
@@ -105,7 +125,14 @@ function JobsView({ jobs, isLoading, onJobAction }) {
     .filter(job => !filterCity || cityFromLocation(job.location) === filterCity)
     .sort((a, b) => {
       if (sortBy === 'match_score') return (b.match_score || 0) - (a.match_score || 0);
-      if (sortBy === 'date') return new Date(b.deadline || 0) - new Date(a.deadline || 0);
+      if (sortBy === 'date') {
+        // Date - Date, JS'te valueOf() ile örtük olarak sayıya çevrilip
+        // çalışıyordu ama TypeScript'in kabul edeceği bir işlem değil —
+        // .getTime() ile aynı davranışı açıkça ifade ediyoruz.
+        const bTime = b.deadline ? new Date(b.deadline).getTime() : 0;
+        const aTime = a.deadline ? new Date(a.deadline).getTime() : 0;
+        return bTime - aTime;
+      }
       if (sortBy === 'company') return (a.company || '').localeCompare(b.company || '');
       return 0;
     });
@@ -144,7 +171,7 @@ function JobsView({ jobs, isLoading, onJobAction }) {
 
   const itemVariants = {
     hidden: { opacity: 0, y: 10 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }
+    show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" as const } }
   };
 
   return (

@@ -448,34 +448,37 @@ async def generate_outreach_sync(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """Cold email + LinkedIn DM taslağı üretir (Senkron)."""
-    from google import genai
+    """Cold email + LinkedIn DM taslağı üretir (senkron — InterviewCoach'un
+    "referans/soğuk e-posta bul" adımı için, sonucu doğrudan bekler).
+    Not: Bu artık _run_outreach ile aynı yardımcıyı (_call_model_async_json)
+    ve aynı tek-istek-iki-metin deseni kullanıyor — öncesinde burada
+    retry/timeout/hata yönetimi olmayan, iki AYRI ham Gemini çağrısı yapan
+    (kotayı gereksiz tüketen ve model boş yanıt döndüğünde .text'e erişirken
+    AttributeError ile 500 veren) kopya bir uygulama vardı."""
+    from backend.ai.gemini_client import _call_model_async_json
 
     cv = db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.is_default.desc()).first()
     cv_text = cv.extracted_text[:1500] if cv else ""
     skills_str = ", ".join(current_user.skills or [])
 
-    client = genai.Client(api_key=current_user.gemini_api_key or settings.GEMINI_API_KEY)
-    email_prompt = f"""Profesyonel bir kariyer danışmanısın.
-"{req.company_name}" şirketine "{req.job_title}" pozisyonu için etkileyici, kişiselleştirilmiş bir cold email yaz.
+    prompt = f"""Profesyonel bir kariyer danışmanısın.
+"{req.company_name}" şirketine "{req.job_title}" pozisyonu için başvuran bir aday için iki ayrı metin hazırla.
+
 Aday: {current_user.full_name}, {current_user.university} {current_user.department}
 Beceriler: {skills_str}
 İlan: {req.job_description[:300]}
 CV özeti: {cv_text[:300]}
 
-Kurallar: Max 200 kelime, resmi ama samimi, spesifik değer önerisi sun, "Sayın İlgili," ile başla."""
+1) cold_email: Etkileyici, kişiselleştirilmiş bir cold email. Max 200 kelime, resmi ama samimi, spesifik değer önerisi sun, "Sayın İlgili," ile başla.
+2) linkedin_dm: LinkedIn'de {req.company_name} çalışanına gönderilecek kısa DM taslağı. Max 80 kelime, kişisel ve doğal.
 
-    email_resp = await client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=email_prompt)
-    cold_email = email_resp.text.strip()
+Şu JSON formatında yanıt ver: {{"cold_email": "...", "linkedin_dm": "..."}}"""
 
-    dm_prompt = f"""LinkedIn'de {req.company_name} çalışanına gönderilecek kısa DM taslağı yaz.
-Aday: {current_user.full_name}, {current_user.department}
-Pozisyon: {req.job_title}
-Max 80 kelime, kişisel ve doğal."""
-    dm_resp = await client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=dm_prompt)
-    linkedin_dm = dm_resp.text.strip()
-
-    return {"cold_email": cold_email, "linkedin_dm": linkedin_dm}
+    result = await _call_model_async_json(prompt, api_key=current_user.gemini_api_key)
+    return {
+        "cold_email": (result.get("cold_email") or "").strip(),
+        "linkedin_dm": (result.get("linkedin_dm") or "").strip(),
+    }
 
 
 @router.post("/strategy", status_code=202)

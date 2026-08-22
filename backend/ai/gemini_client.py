@@ -319,22 +319,20 @@ Adayın CV'si: {cv_text}
             client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=prompt),
             timeout=30,
         )
+        if not response or not (response.text or "").strip():
+            raise AIServiceError("Gemini modelinden boş yanıt döndü.")
         return response.text.strip()
 
     except asyncio.TimeoutError:
         logger.error("Cover letter generation timeout")
         raise KariyerTimeoutError("Cover letter generation timed out")
 
+    except AIServiceError:
+        raise
+
     except Exception as e:
         logger.error(f"Motivasyon mektubu üretilemedi: {type(e).__name__} - {e}")
-        return f"""Sayın İnsan Kaynakları Yetkilisi,
-
-{company_name} bünyesinde ilan edilen {job_title} pozisyonu ile yakından ilgileniyorum. {university} {department} öğrencisi olarak edindiğim yetkinlikleri şirketinizin hedefleriyle birleştirmek istiyorum.
-
-İlgili gereksinimlerin kariyer profilimle örtüştüğüne inanıyorum. Değerli vaktinizi ayırdığınız için teşekkür eder, olumlu dönüşlerinizi beklerim.
-
-Saygılarımla,
-{user_name}"""
+        raise AIServiceError(f"AI service error: {e}")
 
 
 async def revise_cover_letter(
@@ -637,12 +635,17 @@ Projeler: {projects or 'Belirtilmedi'}
             client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=prompt),
             timeout=30,
         )
+        if not response or not (response.text or "").strip():
+            raise AIServiceError("Gemini modelinden boş yanıt döndü.")
         return response.text.strip()
 
     except asyncio.TimeoutError:
         logger.error("CV content generation timeout")
         raise KariyerTimeoutError("CV generation timed out")
 
+    except AIServiceError:
+        raise
+
     except Exception as e:
         logger.error(f"CV içeriği üretilemedi: {type(e).__name__} - {e}")
-        return "[Hata] Özgeçmiş üretilirken API limitlerine takıldık veya sunucu yanıt vermedi."
+        raise AIServiceError(f"AI service error: {e}")

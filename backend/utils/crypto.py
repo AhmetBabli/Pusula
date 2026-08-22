@@ -17,8 +17,12 @@ def encrypt(value: str) -> str:
     try:
         return _fernet.encrypt(value.encode()).decode()
     except Exception as e:
+        # Eskiden hata durumunda "" dönüyordu — bu, çağıran property setter'ın
+        # (ör. UserProfile.gemini_api_key, EmailAccount.app_password) kullanıcı
+        # "kaydedildi" mesajı görmesine rağmen aslında hiçbir şeyin (NULL)
+        # kaydedilmemesine yol açardı. Artık hata gerçekten yukarı fırlatılıyor.
         logger.error(f"[Şifreleme Hatası] Veri şifrelenirken beklenmeyen bir sorun oluştu: {e}")
-        return ""
+        raise
 
 def decrypt(token: str) -> str:
     """Base64 formatındaki şifreli metni çözer ve normal metni döndürür."""

@@ -51,6 +51,40 @@ def test_favorite_does_not_leak_between_users(client, db_session):
     assert job_b["is_favorite"] is False  # B'nin durumu A'dan hiç etkilenmemeli
 
 
+def test_private_inbox_job_not_visible_to_other_users(client, db_session):
+    """convert-to-job ile oluşturulan bir Job, kullanıcının ÖZEL Gmail
+    mesajının içeriğini taşıyabiliyor (item.content_original). owner_user_id
+    eklenmeden önce bu satır list_jobs/get_job üzerinden TÜM kullanıcılara
+    görünüyordu — bu test artık başka bir kullanıcının onu ne listede ne de
+    detayda göremediğini kilitliyor."""
+    headers_owner = _auth_headers(client, "job-owner@example.com")
+    headers_stranger = _auth_headers(client, "job-stranger@example.com")
+    owner_id = client.get("/api/users/profile", headers=headers_owner).json()["id"]
+
+    private_job = Job(
+        owner_user_id=owner_id,
+        source="gmail_inbox",
+        source_url="inbox://item/999",
+        title="Özel Fırsat",
+        company="Gizli Şirket",
+        description="Kullanıcının özel e-postasının tam içeriği burada.",
+    )
+    db_session.add(private_job)
+    db_session.commit()
+    db_session.refresh(private_job)
+
+    list_owner = client.get("/api/jobs/", headers=headers_owner).json()
+    list_stranger = client.get("/api/jobs/", headers=headers_stranger).json()
+    assert any(j["id"] == private_job.id for j in list_owner)
+    assert not any(j["id"] == private_job.id for j in list_stranger)
+
+    res_owner = client.get(f"/api/jobs/{private_job.id}", headers=headers_owner)
+    assert res_owner.status_code == 200
+
+    res_stranger = client.get(f"/api/jobs/{private_job.id}", headers=headers_stranger)
+    assert res_stranger.status_code == 404
+
+
 def test_status_does_not_leak_between_users(client, db_session):
     job = _seed_job(db_session, source_url="https://example.com/ilan/shared-2")
     headers_a = _auth_headers(client, "user-a2@example.com")

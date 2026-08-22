@@ -134,6 +134,7 @@ def convert_item_to_job(item_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=400, detail="Sadece 'iş fırsatı' tipi öğeler başvuruya dönüştürülebilir.")
 
     job = Job(
+        owner_user_id=current_user.id,
         source="gmail_inbox",
         source_url=f"inbox://item/{item.id}",
         title=item.title,

@@ -1,11 +1,17 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from backend.database import Base
 
 class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # NULL: herkese açık, taranmış bir ilan (paylaşılan katalog).
+    # Dolu: bir kullanıcının gelen kutusundan dönüştürdüğü ÖZEL bir fırsat —
+    # o kullanıcının e-posta içeriğini taşıyabilir, bu yüzden sadece
+    # sahibine gösterilmeli (bkz. routers/jobs.py list_jobs/get_job).
+    owner_user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=True, index=True)
 
     # Kaynak bilgisi
     source = Column(String(50), nullable=False)        # kariyer_net, linkedin, youthall

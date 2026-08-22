@@ -176,6 +176,11 @@ def test_convert_job_item_creates_job_and_marks_applied(client, db_session):
     assert job.company == "İnsan Kaynakları"
     assert job.description == "Tam e-posta metni burada."
     assert job.source_url == f"inbox://item/{item.id}"
+    # Bu Job kullanıcının özel e-posta içeriğini taşıyor (content_original) —
+    # owner_user_id işaretlenmezse list_jobs/get_job üzerinden TÜM
+    # kullanıcılara görünür hale geliyordu (bkz. test_jobs.py).
+    profile = client.get("/api/users/profile", headers=headers).json()
+    assert job.owner_user_id == profile["id"]
 
     db_session.refresh(item)
     assert item.is_applied is True

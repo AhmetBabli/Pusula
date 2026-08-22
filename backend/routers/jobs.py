@@ -45,6 +45,10 @@ def list_jobs(
             JobUserState,
             (JobUserState.job_id == Job.id) & (JobUserState.user_id == current_user.id),
         )
+        # owner_user_id dolu bir Job, bir kullanıcının gelen kutusundan
+        # dönüştürdüğü ÖZEL bir fırsat (özel e-posta içeriği taşıyabilir) —
+        # sadece sahibine görünmeli, herkese açık paylaşılan katalog değil.
+        .filter((Job.owner_user_id.is_(None)) | (Job.owner_user_id == current_user.id))
     )
 
     if source:
@@ -77,6 +81,10 @@ def list_jobs(
 def get_job(job_id: int, db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
     """İlan detayı."""
     job = get_or_404(db, Job, job_id, "İlan")
+    if job.owner_user_id is not None and job.owner_user_id != current_user.id:
+        # Başkasının gelen kutusundan dönüştürdüğü özel bir fırsat — 404,
+        # var olduğunu bile ifşa etmeyelim.
+        raise HTTPException(status_code=404, detail="İlan bulunamadı")
     state = db.query(JobUserState).filter(
         JobUserState.user_id == current_user.id, JobUserState.job_id == job_id
     ).first()

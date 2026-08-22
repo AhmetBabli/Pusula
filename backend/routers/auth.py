@@ -20,6 +20,13 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 
+# Var olmayan bir e-posta anında dönüp var olan ~100ms'lik bcrypt maliyetini
+# ödemeseydi, bu zamanlama farkı bir saldırganın hangi e-postaların kayıtlı
+# olduğunu (rate limit'i yavaşça atlatarak) keşfetmesine yardımcı olabilirdi.
+# Var olmayan kullanıcılarda da bu sahte hash'e karşı bir doğrulama çalıştırıp
+# iki yolu zamanlama açısından birbirine yaklaştırıyoruz.
+_DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-parity")
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -191,7 +198,11 @@ def google_auth(request: Request, req: GoogleAuthRequest, db: Session = Depends(
 def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
     """E-posta + şifre ile giriş yapar, JWT token döner."""
     user = db.query(UserProfile).filter(UserProfile.email == req.email).first()
-    if not user or not verify_password(req.password, user.hashed_password):
+    # Kullanıcı yoksa bile bcrypt doğrulamasını çalıştır — "not user" kısayolu
+    # anında dönerken var olan kullanıcı ~100ms bcrypt maliyeti ödüyordu, bu
+    # zamanlama farkı hesap keşfine (hangi e-postalar kayıtlı) yardımcı olabilirdi.
+    password_valid = verify_password(req.password, user.hashed_password if user else _DUMMY_PASSWORD_HASH)
+    if not user or not password_valid:
         raise HTTPException(status_code=401, detail="Geçersiz e-posta veya şifre")
 
     token = create_user_token(user)

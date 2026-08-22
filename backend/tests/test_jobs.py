@@ -225,3 +225,13 @@ def test_run_job_sync_matches_per_user(client, db_session, db_engine, monkeypatc
     state_b = db_session.query(JobUserState).filter(JobUserState.user_id == user_b.id, JobUserState.job_id == job.id).first()
     assert state_a.match_score == 77.0
     assert state_b.match_score == 33.0
+
+
+def test_update_job_status_rejects_invalid_value(client, db_session):
+    """Regresyon testi: events.py PATCH /status'ta bir whitelist kullanırken
+    jobs.py aynı ucun herhangi bir string'i kabul etmesi tutarsızdı."""
+    job = _seed_job(db_session)
+    headers = _auth_headers(client, "job-status-whitelist@example.com")
+
+    res = client.patch(f"/api/jobs/{job.id}/status", json={"status": "cok_alakasiz_bir_durum"}, headers=headers)
+    assert res.status_code == 400

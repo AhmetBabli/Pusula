@@ -115,6 +115,10 @@ def update_job_status(
     current_user: UserProfile = Depends(get_current_user),
 ):
     """İlan durumunu JSON body üzerinden günceller — sadece bu kullanıcı için."""
+    valid_statuses = ["new", "reviewed", "applying", "applied", "interview", "offer", "rejected"]
+    if payload.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Geçersiz durum. Geçerli: {valid_statuses}")
+
     get_or_404(db, Job, job_id, "İlan")
     state = get_or_create_job_state(db, current_user.id, job_id)
     state.status = payload.status

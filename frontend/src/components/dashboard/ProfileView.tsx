@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Check, Save, X, LogOut, KeyRound, ExternalLink, CheckCircle2, Pencil, Eye, EyeOff, Compass, Github, Linkedin, Briefcase, Award } from 'lucide-react';
 import { updateProfile } from '../../services/api';
@@ -66,6 +66,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [removingKey, setRemovingKey] = useState(false);
   const [editingIdentity, setEditingIdentity] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Unmount olduktan sonra sessizce boşa giden bir setState çağrısı bırakmasın diye.
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  }, []);
 
   const toggleSkill = (skill: string) => {
     setFormData(prev => ({
@@ -130,7 +136,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
       setShowGeminiKey(false);
       setEditingIdentity(false);
       setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 3000);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setIsSaved(false), 3000);
     } catch (err) {
       setError((err as Error).message || t('profile_save_error'));
     } finally {

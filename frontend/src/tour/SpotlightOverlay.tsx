@@ -1,42 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SpotlightOverlayProps {
   targetSelector: string | null;
+  rect: DOMRect | null;
 }
 
 const PADDING = 8;
 
-/** Hedef elementin etrafında, box-shadow hilesiyle tek div'lik bir "spot ışığı" deliği açar. */
-export function SpotlightOverlay({ targetSelector }: SpotlightOverlayProps) {
-  const [rect, setRect] = useState<DOMRect | null>(null);
-
-  useEffect(() => {
-    if (!targetSelector) {
-      setRect(null);
-      return;
-    }
-
-    const measure = () => {
-      const el = document.querySelector(targetSelector);
-      setRect(el ? el.getBoundingClientRect() : null);
-    };
-
-    // İlk ölçüm bir tık gecikmeli — sekme geçişinden hemen sonra hedef DOM'a
-    // henüz gelmemiş olabilir.
-    const t = setTimeout(measure, 60);
-    window.addEventListener('resize', measure);
-    window.addEventListener('scroll', measure, true);
-    const interval = setInterval(measure, 400); // layout kaymalarını (animasyonlar vb.) yakalamak için
-
-    return () => {
-      clearTimeout(t);
-      clearInterval(interval);
-      window.removeEventListener('resize', measure);
-      window.removeEventListener('scroll', measure, true);
-    };
-  }, [targetSelector]);
-
+/** Hedef elementin etrafında, box-shadow hilesiyle tek div'lik bir "spot ışığı" deliği açar.
+ * rect, TourOverlay'in zaten çağırdığı useTargetRect'ten geliyor — önceden burada
+ * AYNI hedefi AYNI anda ölçen ikinci, bağımsız bir 400ms polling döngüsü vardı. */
+export function SpotlightOverlay({ targetSelector, rect }: SpotlightOverlayProps) {
   return (
     <div className="fixed inset-0 z-[100] pointer-events-none">
       <AnimatePresence>

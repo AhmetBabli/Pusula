@@ -97,7 +97,11 @@ export function useAgentWebSocket() {
           setAgents((prev) => ({ ...prev, [agentKey]: event }));
           if (event.step) addLog(`[${event.agent}] ${event.step}`);
         }
-      } catch { /* JSON parse hataları sessizce geçilir */ }
+      } catch (err) {
+        // Önceden tamamen sessizce geçiliyordu — arayüz "donmuş" görünüyordu,
+        // hiçbir tanı bilgisi kalmıyordu. En azından konsola düşsün.
+        console.error('[useAgentWebSocket] Mesaj ayrıştırılamadı:', err, e.data);
+      }
     };
 
     ws.onclose = () => {

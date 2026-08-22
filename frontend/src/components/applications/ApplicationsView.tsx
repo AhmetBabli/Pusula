@@ -1,16 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ClipboardList, CheckCircle, XCircle, Clock, Send, FileText, ArrowRight, Activity, Mail, AlertTriangle, ExternalLink, RotateCcw, Copy, Check, HelpCircle, Users, Award, CalendarCheck, MessageSquare, Compass } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 function CopyButton({ text, label }) {
   const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef(null);
+
+  // Unmount olduktan sonra sessizce boşa giden bir setState çağrısı bırakmasın diye.
+  useEffect(() => () => {
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+  }, []);
+
   if (!text) return null;
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setCopied(false), 1800);
     } catch {
       // Panoya erişim engellenmişse sessizce yok say — buton her zaman metni gösterir
     }

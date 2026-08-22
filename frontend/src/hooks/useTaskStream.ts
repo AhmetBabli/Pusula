@@ -69,8 +69,10 @@ export function useTaskStream() {
         if (data.status === 'done' || data.status === 'failed' || data.status === 'not_found') {
           close();
         }
-      } catch {
-        // JSON parse hatası — sessizce geç
+      } catch (err) {
+        // Önceden tamamen sessizce geçiliyordu — arayüz "donmuş" görünüyordu,
+        // hiçbir tanı bilgisi kalmıyordu. En azından konsola düşsün.
+        console.error('[useTaskStream] Mesaj ayrıştırılamadı:', err, event.data);
       }
     };
 

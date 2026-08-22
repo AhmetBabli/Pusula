@@ -42,7 +42,6 @@ const request = async (endpoint, options = {}) => {
 
   try {
     const res = await fetch(url, config);
-    clearTimeout(timeoutId); // İstek başarılıysa sayacı durdur
 
     // Hata Yönetimi
     if (!res.ok) {
@@ -75,6 +74,10 @@ const request = async (endpoint, options = {}) => {
     
     console.error(`[API ERROR] ${url}:`, error.message);
     throw error;
+  } finally {
+    // Önceden sadece başarı yolunda temizleniyordu — fetch tamamen reddedilirse
+    // (ör. gerçek bir ağ hatası, timeout'un kendisi değil) zamanlayıcı sızardı.
+    clearTimeout(timeoutId);
   }
 };
 

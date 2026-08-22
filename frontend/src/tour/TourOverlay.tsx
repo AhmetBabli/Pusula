@@ -65,7 +65,7 @@ export function TourOverlay() {
 
   return (
     <>
-      <SpotlightOverlay targetSelector={step.target} />
+      <SpotlightOverlay targetSelector={step.target} rect={rect} />
 
       <AnimatePresence mode="wait">
         <motion.div

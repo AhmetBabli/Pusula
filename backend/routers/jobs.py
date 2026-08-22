@@ -195,6 +195,12 @@ async def _run_job_sync_tracked(task_id: str):
 # günlük kotayı ~BATCH_SIZE kat daha az tüketiyor.
 MATCH_BATCH_SIZE = 8
 
+# Kullanıcı başına bir sync turunda eşleştirilecek maksimum "beklemede" ilan
+# sayısı — ilan/kullanıcı sayısı büyüdükçe tek bir zamanlayıcı turu orantısız
+# uzamasın diye. En yeni ilanlar önceliklendirilir; kalan eski ilanlar
+# sonraki turlarda sırayla yakalanır.
+MATCH_SCAN_LIMIT = 100
+
 
 # ─── ARKA PLAN GÖREVİ (Kendi DB Session'ını Kendi Yönetir) ───
 async def run_job_sync():
@@ -284,13 +290,24 @@ async def run_job_sync():
             skills = match_user.skills or []
             match_api_key = match_user.gemini_api_key
 
-            existing_state_job_ids = {
-                s.job_id
-                for s in db.query(JobUserState.job_id).filter(
-                    JobUserState.user_id == match_user.id, JobUserState.best_cv_id == default_cv.id
-                ).all()
-            }
-            pending_jobs = db.query(Job).filter(~Job.id.in_(existing_state_job_ids)).all() if existing_state_job_ids else db.query(Job).all()
+            # NOT IN + önce belleğe çekilmiş bir id kümesi yerine LEFT OUTER
+            # JOIN + IS NULL — ilan sayısı büyüdükçe potansiyel olarak devasa
+            # bir id listesini SQL'e taşımak zorunda kalmıyor. En yeni
+            # MATCH_SCAN_LIMIT ilanla sınırlı, tek bir sync turu ilan/kullanıcı
+            # sayısı büyüdükçe orantısız uzamasın diye.
+            pending_jobs = (
+                db.query(Job)
+                .outerjoin(
+                    JobUserState,
+                    (JobUserState.job_id == Job.id)
+                    & (JobUserState.user_id == match_user.id)
+                    & (JobUserState.best_cv_id == default_cv.id),
+                )
+                .filter(JobUserState.id.is_(None))
+                .order_by(Job.scraped_at.desc())
+                .limit(MATCH_SCAN_LIMIT)
+                .all()
+            )
             pending_match = [
                 (job, " ".join(part for part in [job.description, job.requirements, job.title] if part))
                 for job in pending_jobs

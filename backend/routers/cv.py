@@ -21,10 +21,6 @@ logger = logging.getLogger(__name__)
 
 # === Pydantic Schemas ===
 
-class CVCreateRequest(BaseModel):
-    title: str
-    variant_type: str  # ai, cyber, it, general
-
 class CVGenerateRequest(BaseModel):
     variant_type: str
     user_name: str = Field(default="Ahmet Babli", max_length=200)

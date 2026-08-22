@@ -97,8 +97,17 @@ export const loginWithGoogle = async (code) => {
   return data;
 };
 
-export const logout = () => {
-  localStorage.removeItem('token');
+export const logout = async () => {
+  // Sunucu tarafında token_version'ı artırıp bu andan önceki tüm JWT'leri
+  // (tüm cihazlar dahil) geçersiz kılar. Ağ hatası olsa bile kullanıcı yerel
+  // olarak çıkış yapabilsin diye hata yutuluyor.
+  try {
+    await request('/auth/logout', { method: 'POST' });
+  } catch {
+    // yut
+  } finally {
+    localStorage.removeItem('token');
+  }
 };
 
 export const getToken = () => localStorage.getItem('token');

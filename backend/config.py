@@ -34,8 +34,13 @@ class Settings:
     if DATABASE_TYPE not in ["sqlite", "postgresql"]:
         raise ValueError(f"DATABASE_TYPE must be 'sqlite' or 'postgresql', got '{DATABASE_TYPE}'")
 
-    # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_hex(32))
+    # Security — boş bırakılırsa __init__ DEBUG'a göre karar verir (prod'da
+    # zorunlu kılar, dev'de geçici bir anahtar üretir). Burada rastgele bir
+    # anahtar ÜRETİLMEZ: bu satır modül import edilirken bir kere çalışır, yani
+    # birden fazla worker süreciyle (gunicorn/uvicorn --workers N) her worker
+    # FARKLI bir anahtarla açılır ve bir worker'ın imzaladığı token diğerinde
+    # geçersiz sayılır — kullanıcılar rastgele "çıkış yapılmış" görünürdü.
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
 
     # AI
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -80,9 +85,14 @@ class Settings:
         "http://127.0.0.1:5173",
         "http://0.0.0.0:5173",
     ]
-    _prod_origins = [
-        "https://senin-domainin.com", # İleride buraya frontend'in canlı URL'sini yazacaksın
-    ]
+    # Gerçek domain elle koda yazılmak yerine env'den okunur (virgülle ayrılmış
+    # birden fazla origin desteklenir) — ayarlanmazsa placeholder'a düşer, bu da
+    # gerçek bir origin'i asla eşleştirmeyeceği için CORS'u güvenli biçimde kapalı tutar.
+    _prod_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+    _prod_origins = (
+        [origin.strip() for origin in _prod_origins_env.split(",") if origin.strip()]
+        or ["https://senin-domainin.com"]  # İleride buraya frontend'in canlı URL'sini yazacaksın
+    )
     ALLOWED_ORIGINS: list = _dev_origins if DEBUG else _prod_origins
 
     def __init__(self):
@@ -109,16 +119,19 @@ class Settings:
                 stacklevel=2,
             )
 
-        # 🔒 3. Güvenlik uyarıları
+        # 🔒 3. SECRET_KEY Yönetimi (ENCRYPTION_KEY ile aynı fail-closed desen)
         weak_keys = ["dev-secret-key-change-in-production", "change-this-in-production", ""]
         if self.SECRET_KEY in weak_keys:
             if not self.DEBUG:
                 raise ValueError(
-                    "⛔ Üretimde zayıf SECRET_KEY kullanılamaz! "
-                    ".env dosyasında güçlü bir anahtar ayarlayın."
+                    "⛔ Üretimde SECRET_KEY zorunludur! .env dosyasında güçlü bir anahtar ayarlayın. "
+                    "Generate: python -c \"import secrets; print(secrets.token_hex(32))\""
                 )
+            # ⚠️ DEV MODE WARNING: süreç başına üretilir, birden fazla worker'da
+            # (veya restart'ta) farklı olur — sadece tek-worker geliştirme için güvenli.
+            self.SECRET_KEY = secrets.token_hex(32)
             warnings.warn(
-                "⚠️ Zayıf SECRET_KEY tespit edildi. Üretimde güçlü bir anahtar kullanın.",
+                "⚠️ SECRET_KEY .env'de bulunamadı. Geliştirme için TEMPORARY anahtar oluşturuldu.",
                 stacklevel=2,
             )
 

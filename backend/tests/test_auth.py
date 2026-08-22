@@ -1,13 +1,18 @@
 """
 Kimlik doğrulama testleri: kayıt, giriş ve rate limiting.
 
-Bu dosyadaki iki test özellikle bu oturumda düzeltilen iki gerçek bug'ı
-regresyona karşı kilitliyor:
+Bu dosyadaki testler bu oturumda düzeltilen gerçek bug'ları regresyona karşı
+kilitliyor:
 - test_register_does_not_leak_fake_defaults: SQLAlchemy'nin `university=None`
   atamasını modelin sahte default'uyla ("Doğuş Üniversitesi") sessizce
   değiştirmesi bug'ı.
 - test_login_is_rate_limited_after_five_attempts: /auth/login'in daha önce
   hiç sınırlanmıyor olması bug'ı.
+- test_logout_invalidates_previous_token: audit item #11 — JWT'lerin sunucu
+  taraflı iptal mekanizması yoktu, /logout bir no-op'tan ibaretti.
+- test_google_login_does_not_hijack_other_users_email_account: audit item
+  #11 — Google girişi, başka bir kullanıcının app-password ile bağladığı
+  Gmail hesabını sessizce çalabiliyordu.
 """
 from backend.tests.conftest import register_and_login
 
@@ -80,3 +85,66 @@ def test_login_is_rate_limited_after_five_attempts(client):
 
     res = client.post("/api/auth/login", json=payload)
     assert res.status_code == 429
+
+
+def test_logout_invalidates_previous_token(client):
+    """Regresyon testi: /logout artık sadece istemcinin token'ı silmesine
+    güvenmiyor — token_version'ı artırıp o ana kadar üretilmiş tüm JWT'leri
+    sunucu tarafında geçersiz kılıyor."""
+    token = register_and_login(client, email="logout@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    res = client.get("/api/users/profile", headers=headers)
+    assert res.status_code == 200
+
+    res = client.post("/api/auth/logout", headers=headers)
+    assert res.status_code == 204
+
+    res = client.get("/api/users/profile", headers=headers)
+    assert res.status_code == 401
+
+
+def test_google_login_does_not_hijack_other_users_email_account(client, db_session, monkeypatch):
+    """Regresyon testi: A kullanıcısı b@gmail.com'u app-password ile bağlamışsa,
+    biri Google ile b@gmail.com olarak giriş yapınca bu hesap sessizce el
+    değiştirmemeli."""
+    import backend.routers.auth as auth_module
+    from backend.models.user import UserProfile
+    from backend.models.inbox import EmailAccount
+
+    monkeypatch.setattr(auth_module.settings, "GOOGLE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setattr(auth_module.settings, "GOOGLE_CLIENT_SECRET", "fake-client-secret")
+
+    register_and_login(client, email="owner@example.com")
+    owner = db_session.query(UserProfile).filter(UserProfile.email == "owner@example.com").first()
+    db_session.add(EmailAccount(user_id=owner.id, email="b@gmail.com"))
+    db_session.commit()
+
+    class _FakeResponse:
+        def __init__(self, json_data):
+            self.ok = True
+            self.status_code = 200
+            self._json = json_data
+
+        def json(self):
+            return self._json
+
+    def fake_post(url, data=None, timeout=None):
+        return _FakeResponse({
+            "access_token": "fake-google-access-token",
+            "refresh_token": "fake-refresh-token",
+            "scope": "https://www.googleapis.com/auth/gmail.send",
+        })
+
+    def fake_get(url, headers=None, timeout=None):
+        return _FakeResponse({"email": "b@gmail.com", "email_verified": True, "name": "Google Kullanıcı"})
+
+    monkeypatch.setattr(auth_module.requests, "post", fake_post)
+    monkeypatch.setattr(auth_module.requests, "get", fake_get)
+
+    res = client.post("/api/auth/google", json={"code": "fake-auth-code"})
+    assert res.status_code == 200
+
+    db_session.expire_all()
+    linked = db_session.query(EmailAccount).filter(EmailAccount.email == "b@gmail.com").one()
+    assert linked.user_id == owner.id

@@ -10,7 +10,7 @@ from backend.config import settings
 from backend.database import get_db
 from backend.models.user import UserProfile
 from backend.models.inbox import EmailAccount
-from backend.auth import create_access_token, hash_password, verify_password
+from backend.auth import create_user_token, get_current_user, hash_password, verify_password
 from backend.rate_limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -76,7 +76,7 @@ def register(request: Request, req: RegisterRequest, db: Session = Depends(get_d
     db.commit()
     db.refresh(user)
 
-    token = create_access_token({"sub": str(user.id)})
+    token = create_user_token(user)
     return {
         "access_token": token,
         "user": {"id": user.id, "email": user.email, "full_name": user.full_name},
@@ -120,9 +120,14 @@ def google_auth(request: Request, req: GoogleAuthRequest, db: Session = Depends(
     refresh_token = tokens.get("refresh_token")
     granted_scope = tokens.get("scope", "")
 
-    userinfo_res = requests.get(
-        GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10
-    )
+    try:
+        userinfo_res = requests.get(
+            GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=10
+        )
+    except requests.RequestException as e:
+        logger.error(f"Google kullanıcı bilgisi isteği başarısız (ağ hatası): {e}")
+        raise HTTPException(status_code=502, detail="Google ile bağlantı kurulamadı.")
+
     if not userinfo_res.ok:
         raise HTTPException(status_code=400, detail="Google kullanıcı bilgisi alınamadı.")
 
@@ -152,20 +157,29 @@ def google_auth(request: Request, req: GoogleAuthRequest, db: Session = Depends(
 
     # Kullanıcı Gmail gönderim iznini de verdiyse (refresh_token + gmail.send scope),
     # bu hesabı otomatik olarak e-posta gönderimi için bağla — uygulama şifresi gerekmez.
+    # Not: inbox.py'deki add_account ile aynı sahiplik kuralı — e-posta zaten
+    # BAŞKA bir kullanıcıya bağlıysa sessizce el değiştirmesine izin verme
+    # (aksi halde biri A'nın app-password ile bağladığı bir kutuyu, aynı adresle
+    # Google girişi yaparak kendi hesabına çalabilir).
     if refresh_token and GMAIL_SEND_SCOPE in granted_scope:
         account = db.query(EmailAccount).filter(EmailAccount.email == email).first()
-        if not account:
-            account = EmailAccount(user_id=user.id, email=email)
-            db.add(account)
-        account.user_id = user.id
-        account.auth_method = "oauth"
-        account.oauth_refresh_token = refresh_token
-        account.is_active = True
+        if account and account.user_id != user.id:
+            logger.warning(
+                f"Google OAuth Gmail bağlama atlandı: {email} zaten başka bir kullanıcıya bağlı (user_id={account.user_id})."
+            )
+        else:
+            if not account:
+                account = EmailAccount(user_id=user.id, email=email)
+                db.add(account)
+            account.user_id = user.id
+            account.auth_method = "oauth"
+            account.oauth_refresh_token = refresh_token
+            account.is_active = True
 
     db.commit()
     db.refresh(user)
 
-    token = create_access_token({"sub": str(user.id)})
+    token = create_user_token(user)
     return {
         "access_token": token,
         "user": {"id": user.id, "email": user.email, "full_name": user.full_name},
@@ -180,8 +194,16 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Geçersiz e-posta veya şifre")
 
-    token = create_access_token({"sub": str(user.id)})
+    token = create_user_token(user)
     return {
         "access_token": token,
         "user": {"id": user.id, "email": user.email, "full_name": user.full_name},
     }
+
+
+@router.post("/logout", status_code=204)
+def logout(current_user: UserProfile = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Kullanıcının token_version'ını artırır — daha önce üretilmiş tüm JWT'ler
+    (tüm cihazlar dahil) bu andan itibaren geçersiz olur."""
+    current_user.token_version += 1
+    db.commit()

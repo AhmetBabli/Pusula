@@ -51,6 +51,13 @@ class UserProfile(Base):
     # Kayıt sonrası bölüm-tanıtımı + bilgi formu tamamlandı mı?
     onboarding_completed = Column(Boolean, default=False, nullable=False)
 
+    # JWT'ler stateless olduğu için tek başına iptal edilemez — bu sayaç
+    # token'a "ver" claim'i olarak gömülür. /auth/logout her çağrıldığında
+    # artırılır; get_current_user, token'daki değerle burayı karşılaştırıp
+    # eşleşmezse reddeder. Böylece "çıkış yap" gerçekten önceki tüm
+    # token'ları geçersiz kılar (istemcinin token'ı silmesine güvenmek yerine).
+    token_version = Column(Integer, default=0, nullable=False)
+
     # 🚀 Zaman fonksiyonları güncellendi (Timezone-aware)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

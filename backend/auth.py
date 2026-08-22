@@ -89,6 +89,11 @@ def extract_token_from_header(auth_header: Optional[str]) -> str:
     return parts[1]
 
 
+def create_user_token(user) -> str:
+    """Bir kullanıcı için, güncel token_version'ını gömen JWT üretir."""
+    return create_access_token({"sub": str(user.id), "ver": user.token_version})
+
+
 def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
     """İstek başlığındaki JWT'yi doğrulayıp o token'a ait UserProfile'ı döner."""
     from backend.models.user import UserProfile
@@ -102,6 +107,15 @@ def get_current_user(authorization: Optional[str] = Header(None), db: Session = 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Kullanıcı bulunamadı",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Bu değişiklikten önce üretilmiş token'larda "ver" claim'i yok — geriye
+    # dönük uyumluluk için eksikse 0 kabul edilir (token_version de 0'dan başlar).
+    if payload.get("ver", 0) != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Oturum sona ermiş, lütfen tekrar giriş yapın",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user

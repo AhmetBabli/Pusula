@@ -8,14 +8,14 @@ class Application(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # 🚀 Başvuru sahibi: kullanıcı silinirse başvuruları da silinir (Cascade)
-    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # 🚀 Veritabanı Güvenliği: İlan veya CV silinirse, başvuru da otomatik silinir (Cascade)
-    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
-    cv_id = Column(Integer, ForeignKey("cvs.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    cv_id = Column(Integer, ForeignKey("cvs.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Durum
-    status = Column(String(30), default="draft")
+    status = Column(String(30), default="draft", index=True)
     # draft → awaiting_approval → approved → submitted → response_received → interview → offer → rejected
 
     # Başvuru verileri (JSON native formatı doğru kullanılmış)
@@ -65,7 +65,7 @@ class CoverLetter(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # 🚀 İlan silinirse, o ilana yazılmış ön taslak mektuplar da silinir (Cascade)
-    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
 
     content = Column(Text, nullable=False)             # Motivasyon mektubu metni
     version = Column(Integer, default=1)               # Revizyon numarası

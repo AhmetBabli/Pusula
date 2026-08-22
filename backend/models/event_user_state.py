@@ -14,10 +14,12 @@ class EventUserState(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
+    # user_id zaten (user_id, event_id) unique constraint'inin en soldaki
+    # sütunu olduğu için ayrıca index=True gerekmiyor (bkz. job_user_state.py).
     user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
-    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
+    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    status = Column(String(30), default="found")
+    status = Column(String(30), default="found", index=True)
     # found → interested → registered → attended → skipped
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

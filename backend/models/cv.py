@@ -8,7 +8,7 @@ class CV(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # 🚀 Veritabanı Güvenliği: Kullanıcı silinirse, ona ait CV'ler de otomatik silinir (Cascade)
-    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
 
     title = Column(String(200), nullable=False)       # "AI Odaklı CV", "Siber Güvenlik CV"
     variant_type = Column(String(50), nullable=False)  # ai, cyber, it, general

@@ -13,10 +13,13 @@ class JobUserState(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
+    # user_id zaten (user_id, job_id) unique constraint'inin en soldaki sütunu
+    # olduğu için ayrıca index=True gerekmiyor; job_id'ye tek başına (user_id
+    # olmadan) sorgu atan yerler için burada ayrıca indeksleniyor.
     user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
-    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    status = Column(String(30), default="new")
+    status = Column(String(30), default="new", index=True)
     # new → reviewed → applying → applied → interview → offer → rejected
 
     is_favorite = Column(Boolean, default=False)
@@ -24,7 +27,7 @@ class JobUserState(Base):
     # AI Eşleştirme (bu kullanıcının CV'sine göre)
     match_score = Column(Float, default=0.0)
     match_explanation = Column(Text, nullable=True)
-    best_cv_id = Column(Integer, nullable=True)
+    best_cv_id = Column(Integer, nullable=True, index=True)  # dashboard.py CV-varyant istatistiklerinde join'leniyor
     missing_skills = Column(JSON, default=list)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

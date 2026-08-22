@@ -8,7 +8,7 @@ class OutreachRequest(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Sahibi: kullanıcı silinirse taslakları da silinir (Cascade)
-    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
 
     company_name = Column(String(300), nullable=False)
     target_email = Column(String(300), nullable=False)
@@ -16,7 +16,7 @@ class OutreachRequest(Base):
     body = Column(Text, nullable=False)
 
     # awaiting_approval → sent | failed
-    status = Column(String(20), default="awaiting_approval", nullable=False)
+    status = Column(String(20), default="awaiting_approval", nullable=False, index=True)
     send_error = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

@@ -10,7 +10,7 @@ class EmailAccount(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # 🚀 Hesap sahibi: kullanıcı silinirse bağlı e-posta hesapları da silinir (Cascade)
-    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
 
     email = Column(String(200), nullable=False, unique=True)
     _app_password = Column("app_password", String(500), nullable=False, default="")  # Encrypted

@@ -46,17 +46,38 @@ export function useAgentWebSocket() {
   const [connected, setConnected] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  // Eskiden setTimeout(connect, 3000) hiçbir yerde saklanmıyordu — StrictMode'un
+  // mount→cleanup→remount döngüsünde her montaj bir soket + bir reconnect
+  // zamanlayıcısı sızdırıyordu, sonunda birbirini geçersiz kılan birden fazla
+  // soket birikebiliyordu. cancelledRef, unmount edilmiş bir bağlantının
+  // yeniden bağlanmaya çalışmasını da engelliyor.
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelledRef = useRef(false);
   const sessionId = useRef<string>(crypto.randomUUID());
 
   const addLog = useCallback((msg: string) => {
     setLogs((prev) => [...prev.slice(-99), `[${new Date().toLocaleTimeString()}] ${msg}`]);
   }, []);
 
+  const clearReconnectTimer = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  };
+
   const connect = useCallback(() => {
+    if (cancelledRef.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const token = getToken() || '';
-    const ws = new WebSocket(`ws://localhost:8000/ws/agents/${sessionId.current}?token=${encodeURIComponent(token)}`);
+    // Eskiden ws://localhost:8000 sabit kodluydu — dağıtılan hiçbir ortamda
+    // çalışmıyordu (ve HTTPS sayfadan ws:// zaten "mixed content" olarak
+    // engellenir). Artık sayfanın kendi origin'inden türetiliyor; Vite dev
+    // sunucusunda /ws proxy'si (vite.config.ts) bunu backend'e yönlendiriyor,
+    // production'da aynı origin/reverse proxy üzerinden gerçek backend'e gider.
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${window.location.host}/ws/agents/${sessionId.current}?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -81,8 +102,10 @@ export function useAgentWebSocket() {
 
     ws.onclose = () => {
       setConnected(false);
+      if (cancelledRef.current) return; // unmount edilmiş bir hook yeniden bağlanmaya çalışmasın
       addLog(`🔌 ${translateStatic('ws_reconnecting')}`);
-      setTimeout(connect, 3000); // Auto-reconnect
+      clearReconnectTimer();
+      reconnectTimerRef.current = setTimeout(connect, 3000);
     };
 
     ws.onerror = () => {
@@ -91,9 +114,13 @@ export function useAgentWebSocket() {
   }, [addLog]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     connect();
     return () => {
+      cancelledRef.current = true;
+      clearReconnectTimer();
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [connect]);
 

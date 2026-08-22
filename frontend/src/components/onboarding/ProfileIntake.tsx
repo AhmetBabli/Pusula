@@ -167,8 +167,16 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Profil yüklemesi başarısız olursa (ör. geçici ağ sorunu) form BOŞ
+  // görünüyordu ve kullanıcı hiçbir uyarı görmeden gönderiyordu — bu da
+  // sunucudaki mevcut profili (deneyim, sertifika, beceri...) boş
+  // değerlerle eziyordu. Artık yükleme başarısız olduğunda formu hiç
+  // göstermiyoruz, "Tekrar Dene" ile açıkça yeniden denenmesi gerekiyor.
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  useEffect(() => {
+  const loadProfile = () => {
+    setLoading(true);
+    setLoadFailed(false);
     getProfile()
       .then((p: any) => {
         setData({
@@ -185,8 +193,14 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
           certificates: p.certificates || [],
         });
       })
-      .catch(() => {})
+      .catch(() => {
+        setLoadFailed(true);
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadProfile();
   }, []);
 
   const isValid = data.university.trim() && data.department.trim() && data.skills.length > 0 && data.target_sectors.length > 0;
@@ -207,6 +221,25 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
 
   if (loading) {
     return <div className="min-h-screen bg-surface" />;
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-surface text-on-surface px-6 py-12 text-center">
+        <div className="max-w-md space-y-4">
+          <AlertCircle className="w-10 h-10 text-error mx-auto" />
+          <h2 className="text-xl font-headline font-semibold text-on-surface">{t('intake_load_error_title')}</h2>
+          <p className="text-on-surface-variant font-body text-sm">{t('intake_load_error_desc')}</p>
+          <button
+            type="button"
+            onClick={loadProfile}
+            className="px-5 py-2.5 bg-primary-container hover:bg-blue-700 text-white text-sm font-label rounded-xl transition-colors"
+          >
+            {t('intake_load_error_retry')}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -34,10 +34,20 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_URL || 'http://127.0.0.1:8000',
           changeOrigin: true,
           secure: false,
-          
+
           // NOT: Eğer backend router'ında (FastAPI) '/api' öneki YOKSA,
           // proxy'nin bu '/api' kısmını silip backend'e temiz yollaması için aşağıdaki satırı açabilirsin:
           // rewrite: (path) => path.replace(/^\/api/, '')
+        },
+        // Ajan Merkezi'nin canlı WebSocket bağlantısı için — eskiden frontend
+        // ws://localhost:8000'e sabit kodlu bağlanıyordu, bu proxy olmadan
+        // useAgentWebSocket.ts'nin göreli (aynı origin) bağlantısı dev
+        // sunucusunda backend'e ulaşamaz.
+        '/ws': {
+          target: env.VITE_API_URL || 'http://127.0.0.1:8000',
+          ws: true,
+          changeOrigin: true,
+          secure: false,
         }
       }
     }

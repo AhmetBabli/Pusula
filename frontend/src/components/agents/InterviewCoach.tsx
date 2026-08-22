@@ -91,7 +91,12 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const autoSubmitPendingRef = useRef(false);
   const submitAnswerRef = useRef<(answerOverride?: string) => void>(() => {});
 
-  const sessionId = crypto.randomUUID();
+  // useRef ile: component gövdesinde crypto.randomUUID() çağırmak her
+  // render'da (her interim transkript güncellemesinde bile) yeni bir ID
+  // üretiyordu — araştırma/soru/değerlendirme istekleri hep farklı
+  // session_id taşıyordu, sunucu tarafında hiçbir oturum korelasyonu
+  // kurulamıyordu.
+  const sessionId = useRef(crypto.randomUUID()).current;
 
   const clearSilenceTimer = () => {
     if (silenceTimerRef.current) {

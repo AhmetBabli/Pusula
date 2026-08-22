@@ -513,6 +513,9 @@ const translations: Translations = {
   intake_saving: { tr: 'Kaydediliyor...', en: 'Saving...' },
   intake_save_error: { tr: 'Kaydedilemedi. Lütfen tekrar deneyin.', en: 'Could not save. Please try again.' },
   intake_validation_hint: { tr: 'Devam etmek için üniversite, bölüm, en az bir yetenek ve en az bir hedef sektör girin.', en: 'To continue, enter your university, department, at least one skill, and at least one target sector.' },
+  intake_load_error_title: { tr: 'Profilin yüklenemedi', en: 'Could not load your profile' },
+  intake_load_error_desc: { tr: 'Bir bağlantı sorunu oldu. Devam edip boş bir form gönderirsen mevcut profilin üzerine yazılabilir — önce tekrar dene.', en: 'A connection problem occurred. Continuing with an empty form could overwrite your existing profile — try again first.' },
+  intake_load_error_retry: { tr: 'Tekrar Dene', en: 'Try Again' },
 
   // ── İş Deneyimi / Sertifika (EntryListEditor) ──
   entry_save: { tr: 'Kaydet', en: 'Save' },

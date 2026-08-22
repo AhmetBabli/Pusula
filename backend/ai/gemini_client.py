@@ -457,7 +457,11 @@ async def generate_cold_email(
     department: str,
     api_key: Optional[str] = None,
 ) -> str:
-    """Şirkete özel soğuk başvuru e-postası üret."""
+    """Şirkete özel soğuk başvuru e-postası üret. revise_cover_letter'daki
+    gibi hata durumunda sessizce bir şablona düşmez — üretilen metin daha
+    sonra kullanıcının gerçek adıyla gerçek bir İK adresine gönderiliyor;
+    "[Hata] ..." gibi bir string'in kaydedilip e-posta olarak gitmesi geri
+    alınamaz bir dış etki olurdu. Gerçek hatayı fırlatır."""
     prompt = f"""Sen proaktif bir kariyer uzmanısın. Açık ilanı olmayan bir şirkete staj/proje başvurusu yapmak için etkileyici bir "Soğuk İletişim E-postası" oluştur.
 - Maksimum 250 kelime.
 - HTML veya Markdown kullanma.
@@ -477,15 +481,20 @@ Adayın CV'si:
             client.aio.models.generate_content(model=settings.GEMINI_MODEL, contents=prompt),
             timeout=30,
         )
+        if not response or not (response.text or "").strip():
+            raise AIServiceError("Gemini modelinden boş yanıt döndü.")
         return response.text.strip()
 
     except asyncio.TimeoutError:
         logger.error("Cold email generation timeout")
         raise KariyerTimeoutError("Cold email generation timed out")
 
+    except AIServiceError:
+        raise
+
     except Exception as e:
         logger.error(f"Soğuk e-posta oluşturulamadı: {type(e).__name__} - {e}")
-        return "[Hata] E-posta üretim servisine şu an ulaşılamıyor. Lütfen daha sonra tekrar deneyin."
+        raise AIServiceError(f"AI service error: {e}")
 
 
 async def find_alumni_referrals(

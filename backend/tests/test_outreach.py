@@ -70,6 +70,31 @@ def test_prepare_creates_draft_and_does_not_send(client, db_session, monkeypatch
     assert send_calls == []
 
 
+def test_prepare_surfaces_ai_failure_instead_of_sending_error_string(client, db_session, monkeypatch):
+    """generate_cold_email eskiden hata durumunda "[Hata] ..." metnini
+    döndürüyordu; bu metin 200 OK ile taslak olarak kaydedilip kullanıcı
+    onayladığında gerçek bir şirkete e-posta olarak gidiyordu (geri
+    alınamaz dış etki). Artık gerçek hatayı fırlatıyor, /prepare 503
+    dönmeli — sahte bir taslak asla oluşturulmamalı."""
+    from backend.exceptions import AIServiceError
+
+    headers = _auth_headers(client)
+    _seed_cv_and_account(db_session, "outreach@example.com")
+
+    async def fake_hunt_email(company_name, **kwargs):
+        return "ik@sirket.com"
+
+    async def fake_generate_cold_email_fails(**kwargs):
+        raise AIServiceError("AI service temporarily unavailable")
+
+    monkeypatch.setattr("backend.routers.outreach.OutreachAgent.hunt_email", fake_hunt_email)
+    monkeypatch.setattr("backend.routers.outreach.generate_cold_email", fake_generate_cold_email_fails)
+
+    res = client.post("/api/outreach/prepare", json={"company_name": "Test Şirketi"}, headers=headers)
+    assert res.status_code == 503
+    assert "[Hata]" not in res.text
+
+
 def test_prepare_without_findable_email_returns_404(client, db_session, monkeypatch):
     headers = _auth_headers(client)
     _seed_cv_and_account(db_session, "outreach@example.com")

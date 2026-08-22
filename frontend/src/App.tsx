@@ -10,6 +10,7 @@ import { ProfileIntake } from './components/onboarding/ProfileIntake';
 import { TourProvider } from './tour/TourContext';
 import { TourOverlay } from './tour/TourOverlay';
 import { Auth } from './components/auth/Auth';
+import { ResetPassword } from './components/auth/ResetPassword';
 import { ProfileView, UserProfile } from './components/dashboard/ProfileView';
 import { AgentOrchestrator } from './components/agents/AgentOrchestrator';
 import { InterviewCoach } from './components/agents/InterviewCoach';
@@ -34,7 +35,7 @@ import {
 } from './services/api';
 import type { Tab } from './types/tab';
 
-type AppState = 'loading' | 'onboarding' | 'auth' | 'intake' | 'dashboard';
+type AppState = 'loading' | 'onboarding' | 'auth' | 'intake' | 'dashboard' | 'reset-password';
 
 // Sıra, Navigation.tsx'in sabit 7 bölümüyle (Dashboard/Pazar Analizi/Başvurular/
 // Etkinlikler/Portföy/Gelen Kutusu/Ajan Merkezi) birebir eşleşmeli.
@@ -89,6 +90,7 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('loading');
   const [tab, setTab] = useState<Tab>('dashboard');
   const [sideOpen, setSideOpen] = useState(false);
+  const [resetToken, setResetToken] = useState<string | null>(null);
 
   // Otonom Sistem: Kullanıcı profili verisi
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -211,8 +213,19 @@ const App: React.FC = () => {
     }
   };
 
-  // Sayfa yüklendiğinde saklı bir oturum token'ı varsa doğrudan Dashboard'a geç
+  // Sayfa yüklendiğinde saklı bir oturum token'ı varsa doğrudan Dashboard'a geç.
+  // Şifre sıfırlama linki (?resetToken=...) varsa bu her şeyden önceliklidir —
+  // kullanıcı başka bir cihazda/oturumda zaten giriş yapmış olsa bile linke
+  // tıkladıysa şifresini sıfırlamak istiyordur.
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('resetToken');
+    if (token) {
+      setResetToken(token);
+      setAppState('reset-password');
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
     if (getToken()) {
       loadProfileAndEnterDashboard();
     }
@@ -511,6 +524,8 @@ const App: React.FC = () => {
       case 'auth':
         // Giriş/kayıt başarılı olunca gerçek profili çekip Dashboard'a (veya ilk kayıtsa tanıtıma) geç
         return <Auth onLogin={() => loadProfileAndEnterDashboard()} />;
+      case 'reset-password':
+        return <ResetPassword token={resetToken || ''} onDone={() => setAppState('auth')} />;
       case 'intake':
         return <ProfileIntake onComplete={() => loadProfileAndEnterDashboard()} />;
       case 'dashboard':

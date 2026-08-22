@@ -104,6 +104,67 @@ def test_logout_invalidates_previous_token(client):
     assert res.status_code == 401
 
 
+def test_forgot_password_sends_email_with_working_reset_link(client, db_session, monkeypatch):
+    """E-posta gönderimi mock'lanır (gerçek SMTP asla çağrılmaz). Üretilen linkteki
+    token, /reset-password ile gerçekten şifreyi değiştirebilmeli."""
+    import backend.routers.auth as auth_module
+
+    register_and_login(client, email="forgot@example.com", password="eskisifre123")
+
+    sent = {}
+
+    def fake_send_system_email(to_email, subject, html_body):
+        sent["to_email"] = to_email
+        sent["html_body"] = html_body
+
+    monkeypatch.setattr(auth_module, "send_system_email", fake_send_system_email)
+
+    res = client.post("/api/auth/forgot-password", json={"email": "forgot@example.com"})
+    assert res.status_code == 202
+    assert sent["to_email"] == "forgot@example.com"
+
+    import re
+    match = re.search(r"resetToken=([\w-]+)", sent["html_body"])
+    assert match, "E-posta gövdesinde bir resetToken linki bulunamadı"
+    raw_token = match.group(1)
+
+    reset_res = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": "yenisifre456"})
+    assert reset_res.status_code == 200, reset_res.text
+
+    # Eski şifre artık çalışmamalı, yenisi çalışmalı.
+    old_login = client.post("/api/auth/login", json={"email": "forgot@example.com", "password": "eskisifre123"})
+    assert old_login.status_code == 401
+    new_login = client.post("/api/auth/login", json={"email": "forgot@example.com", "password": "yenisifre456"})
+    assert new_login.status_code == 200
+
+    # Token tek kullanımlık olmalı — aynı token'la ikinci bir sıfırlama denemesi reddedilmeli.
+    reuse_res = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": "ucuncusifre789"})
+    assert reuse_res.status_code == 400
+
+
+def test_forgot_password_does_not_leak_whether_email_exists(client, monkeypatch):
+    """Regresyon testi: kayıtlı olan/olmayan e-postalar aynı genel mesajı
+    dönmeli — aksi halde bu uç hesap keşfi için kullanılabilirdi."""
+    import backend.routers.auth as auth_module
+
+    monkeypatch.setattr(auth_module, "send_system_email", lambda *a, **k: None)
+
+    res_missing = client.post("/api/auth/forgot-password", json={"email": "hicyokbutakvim@example.com"})
+    res_missing_body = res_missing.json()
+
+    register_and_login(client, email="exists-for-forgot@example.com")
+    res_exists = client.post("/api/auth/forgot-password", json={"email": "exists-for-forgot@example.com"})
+    res_exists_body = res_exists.json()
+
+    assert res_missing.status_code == res_exists.status_code == 202
+    assert res_missing_body == res_exists_body
+
+
+def test_reset_password_rejects_invalid_token(client):
+    res = client.post("/api/auth/reset-password", json={"token": "hic-var-olmayan-bir-token", "new_password": "yenisifre456"})
+    assert res.status_code == 400
+
+
 def test_google_login_does_not_hijack_other_users_email_account(client, db_session, monkeypatch):
     """Regresyon testi: A kullanıcısı b@gmail.com'u app-password ile bağlamışsa,
     biri Google ile b@gmail.com olarak giriş yapınca bu hesap sessizce el

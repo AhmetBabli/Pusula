@@ -70,6 +70,17 @@ class Settings:
     IMAP_SERVER: str = "imap.gmail.com"
     IMAP_PORT: int = 993
 
+    # Sistem e-postaları (ör. şifre sıfırlama) — kullanıcının KENDİ bağladığı
+    # Gmail hesabından (EmailAccount) farklı: bu, uygulamanın kendi adına
+    # gönderim yaptığı ayrı bir hesap. Boşsa mailer.py gönderim anında net bir
+    # hata fırlatır (sessizce "gönderildi" denip aslında hiçbir şey gitmemesin diye).
+    SYSTEM_EMAIL_ADDRESS: str = os.getenv("SYSTEM_EMAIL_ADDRESS", "")
+    SYSTEM_EMAIL_APP_PASSWORD: str = os.getenv("SYSTEM_EMAIL_APP_PASSWORD", "")
+
+    # Şifre sıfırlama linki gibi kullanıcıya gönderilen e-postalardaki
+    # bağlantıların işaret edeceği frontend adresi.
+    FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+
     # Google OAuth (Sign in with Google + Gmail gönderim izni)
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")

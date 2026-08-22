@@ -58,6 +58,12 @@ class UserProfile(Base):
     # token'ları geçersiz kılar (istemcinin token'ı silmesine güvenmek yerine).
     token_version = Column(Integer, default=0, nullable=False)
 
+    # Şifremi unuttum akışı: ham token asla saklanmaz, sadece SHA256 hash'i —
+    # DB sızarsa çalışan bir sıfırlama linki ele geçirilemesin diye. Tek
+    # kullanımlık ve süreli (bkz. routers/auth.py:PASSWORD_RESET_TOKEN_TTL_HOURS).
+    password_reset_token_hash = Column(String(64), nullable=True, index=True)
+    password_reset_expires_at = Column(DateTime, nullable=True)
+
     # 🚀 Zaman fonksiyonları güncellendi (Timezone-aware)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

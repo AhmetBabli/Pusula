@@ -1,17 +1,21 @@
+import hashlib
 import logging
 import secrets
+from datetime import datetime, timedelta, timezone
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from backend.config import settings
 from backend.database import get_db
+from backend.exceptions import ExternalServiceError
 from backend.models.user import UserProfile
 from backend.models.inbox import EmailAccount
 from backend.auth import create_user_token, get_current_user, hash_password, verify_password
 from backend.rate_limiter import limiter
+from backend.utils.mailer import send_system_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 logger = logging.getLogger(__name__)
@@ -27,6 +31,9 @@ GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 # iki yolu zamanlama açısından birbirine yaklaştırıyoruz.
 _DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-parity")
 
+# Şifre sıfırlama linkinin geçerlilik süresi.
+PASSWORD_RESET_TOKEN_TTL_HOURS = 1
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -41,6 +48,15 @@ class LoginRequest(BaseModel):
 
 class GoogleAuthRequest(BaseModel):
     code: str  # Google Identity Services'in auth-code (popup) akışından gelen tek kullanımlık kod
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8, max_length=200)
 
 
 class UserOut(BaseModel):
@@ -218,3 +234,65 @@ def logout(current_user: UserProfile = Depends(get_current_user), db: Session = 
     (tüm cihazlar dahil) bu andan itibaren geçersiz olur."""
     current_user.token_version += 1
     db.commit()
+
+
+@router.post("/forgot-password", status_code=202)
+@limiter.limit("5/hour")
+def forgot_password(request: Request, req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Şifre sıfırlama linki gönderir. Hesap keşfini önlemek için (login'deki
+    zamanlama yan kanalı düzeltmesiyle aynı disiplin) e-posta kayıtlı olsun ya
+    da olmasın her zaman aynı genel mesaj dönülür — kayıtlı değilse veya
+    e-posta gönderimi başarısız olursa bile."""
+    user = db.query(UserProfile).filter(UserProfile.email == req.email).first()
+    if user:
+        raw_token = secrets.token_urlsafe(32)
+        user.password_reset_token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(hours=PASSWORD_RESET_TOKEN_TTL_HOURS)
+        db.commit()
+
+        reset_link = f"{settings.FRONTEND_BASE_URL}/?resetToken={raw_token}"
+        try:
+            send_system_email(
+                to_email=user.email,
+                subject="Pusula — Şifre Sıfırlama",
+                html_body=f"""
+                    <p>Merhaba {user.full_name},</p>
+                    <p>Pusula hesabın için bir şifre sıfırlama isteği aldık. Aşağıdaki
+                    bağlantıya tıklayarak yeni bir şifre belirleyebilirsin. Bu bağlantı
+                    {PASSWORD_RESET_TOKEN_TTL_HOURS} saat boyunca geçerlidir.</p>
+                    <p><a href="{reset_link}">{reset_link}</a></p>
+                    <p>Bu isteği sen yapmadıysan bu e-postayı yok sayabilirsin —
+                    şifren değişmeden kalır.</p>
+                """,
+            )
+        except ExternalServiceError as e:
+            # Hesap keşfini önlemek için hata kullanıcıya sızdırılmıyor — aşağıdaki
+            # genel mesaj her durumda dönüyor. Gerçek hata sadece log'da kalıyor.
+            logger.error(f"Şifre sıfırlama e-postası gönderilemedi ({user.email}): {e}")
+
+    return {"message": "Bu e-posta kayıtlıysa, şifre sıfırlama bağlantısı gönderildi."}
+
+
+@router.post("/reset-password")
+@limiter.limit("10/hour")
+def reset_password(request: Request, req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Geçerli bir sıfırlama token'ıyla yeni şifre belirler. Başarılı olursa
+    token_version'ı da artırır — çalıntı bir oturum varsa şifre değişikliğiyle
+    birlikte o da geçersiz olsun diye (logout ile aynı mantık)."""
+    token_hash = hashlib.sha256(req.token.encode()).hexdigest()
+    user = db.query(UserProfile).filter(UserProfile.password_reset_token_hash == token_hash).first()
+
+    expires_at = user.password_reset_expires_at if user else None
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if not user or not expires_at or expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Sıfırlama bağlantısı geçersiz veya süresi dolmuş.")
+
+    user.hashed_password = hash_password(req.new_password)
+    user.password_reset_token_hash = None
+    user.password_reset_expires_at = None
+    user.token_version += 1
+    db.commit()
+
+    return {"message": "Şifreniz başarıyla güncellendi."}

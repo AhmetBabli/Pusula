@@ -100,6 +100,9 @@ export const loginWithGoogle = async (code) => {
   return data;
 };
 
+export const forgotPassword = (email) => request('/auth/forgot-password', { method: 'POST', body: { email } });
+export const resetPassword = (token, new_password) => request('/auth/reset-password', { method: 'POST', body: { token, new_password } });
+
 export const logout = async () => {
   // Sunucu tarafında token_version'ı artırıp bu andan önceki tüm JWT'leri
   // (tüm cihazlar dahil) geçersiz kılar. Ağ hatası olsa bile kullanıcı yerel

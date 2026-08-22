@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
-import { login, register, loginWithGoogle } from '../../services/api';
+import { login, register, loginWithGoogle, forgotPassword } from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 interface AuthUser {
@@ -49,9 +49,96 @@ const GoogleIcon = () => (
   </svg>
 );
 
+function ForgotPasswordPanel({ onBack }: { onBack: () => void }) {
+  const { t } = useLanguage();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loading) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await forgotPassword(email.trim());
+      setSubmitted(true);
+    } catch (err) {
+      setError((err as Error).message || t('auth_generic_error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="text-center py-4">
+        <div className="w-12 h-12 rounded-xl bg-primary-container/10 border border-primary-container/20 flex items-center justify-center mb-4 mx-auto">
+          <Mail className="w-6 h-6 text-primary" />
+        </div>
+        <p className="text-sm font-body text-on-surface-variant leading-relaxed mb-6">{t('auth_forgot_password_success')}</p>
+        <button type="button" onClick={onBack} className="text-sm font-label text-primary hover:underline">
+          {t('auth_back_to_login')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-xs font-label text-on-surface-variant hover:text-on-surface mb-6 inline-flex items-center gap-1"
+      >
+        <ArrowRight className="w-3.5 h-3.5 rotate-180" /> {t('auth_back_to_login')}
+      </button>
+      <h2 className="text-lg font-headline font-semibold text-on-surface mb-2">{t('auth_forgot_password_title')}</h2>
+      <p className="text-sm font-body text-on-surface-variant mb-6 leading-relaxed">{t('auth_forgot_password_desc')}</p>
+
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-error/10 border border-error/20 text-error text-sm mb-6">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
+          <label htmlFor="forgot-email" className="text-xs font-label font-medium text-on-surface-variant">{t('auth_email')}</label>
+          <div className="relative group">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant group-focus-within:text-primary transition-colors" />
+            <input
+              id="forgot-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              className="w-full bg-surface-container-highest border border-outline-variant/15 rounded-xl py-3 pl-11 pr-4 text-sm text-on-surface font-body placeholder-on-surface-variant/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all disabled:opacity-50"
+            />
+          </div>
+        </div>
+
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          type="submit"
+          disabled={loading}
+          className="group w-full flex items-center justify-center gap-2 py-3.5 bg-primary-container hover:bg-blue-700 text-white text-sm font-label rounded-xl transition-colors duration-300 shadow-lg shadow-primary-container/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? t('auth_waiting') : t('auth_forgot_password_submit')}
+          {!loading && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+        </motion.button>
+      </form>
+    </div>
+  );
+}
+
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const { t } = useLanguage();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -138,6 +225,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           {/* Top subtle highlight */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-outline-variant/20 to-transparent" />
 
+          {mode === 'forgot' ? (
+            <ForgotPasswordPanel onBack={() => { setMode('login'); setError(null); }} />
+          ) : (
+          <>
           {/* Tabs */}
           <div className="flex w-full mb-8 relative">
             <button
@@ -250,6 +341,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <div className="space-y-2">
                   <label htmlFor="auth-password" className="text-xs font-label font-medium text-on-surface-variant flex justify-between">
                     <span>{t('auth_password')}</span>
+                    {mode === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => { setMode('forgot'); setError(null); }}
+                        className="text-primary hover:underline"
+                      >
+                        {t('auth_forgot_password_link')}
+                      </button>
+                    )}
                   </label>
                   <div className="relative group">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant group-focus-within:text-primary transition-colors" />
@@ -280,6 +380,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               {!loading && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
             </motion.button>
           </form>
+          </>
+          )}
         </div>
       </motion.div>
     </div>

@@ -27,14 +27,14 @@ class CVCreateRequest(BaseModel):
 
 class CVGenerateRequest(BaseModel):
     variant_type: str
-    user_name: str = "Ahmet Babli"
-    email: str = ""
-    phone: str = ""
-    university: str = "Doğuş Üniversitesi"
-    department: str = "Yönetim Bilişim Sistemleri"
+    user_name: str = Field(default="Ahmet Babli", max_length=200)
+    email: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=30)
+    university: str = Field(default="Doğuş Üniversitesi", max_length=200)
+    department: str = Field(default="Yönetim Bilişim Sistemleri", max_length=200)
     skills: list[str] = Field(default_factory=list)
-    experience: str = ""
-    projects: str = ""
+    experience: str = Field(default="", max_length=8000)
+    projects: str = Field(default="", max_length=8000)
 
 # Çıktı şeması (Pydantic otomatik dönüştürecek)
 class CVOut(BaseModel):
@@ -145,8 +145,8 @@ def download_cv_pdf(cv_id: int, db: Session = Depends(get_db), current_user: Use
 @router.post("/upload", status_code=202)
 async def upload_cv(
     background_tasks: BackgroundTasks,
-    title: str = Form(...),
-    variant_type: str = Form(...),
+    title: str = Form(..., max_length=200),
+    variant_type: str = Form(..., max_length=50),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),

@@ -34,7 +34,7 @@ class CustomQARequest(BaseModel):
     questions: List[str] = Field(..., min_length=1, max_length=10)
 
 class SendFollowupRequest(BaseModel):
-    body: str = Field(..., min_length=10)
+    body: str = Field(..., min_length=10, max_length=5000)
 
 class ReviseCoverLetterRequest(BaseModel):
     instruction: str = Field(..., min_length=3, max_length=500)

@@ -29,48 +29,48 @@ logger = logging.getLogger(__name__)
 # ─── Pydantic Modelleri ─────────────────────────────────────────────────────
 
 class SearchRequest(BaseModel):
-    query: str = Field(..., min_length=2, description="'İstanbul React Staj' gibi")
-    location: str = Field(default="Türkiye")
+    query: str = Field(..., min_length=2, max_length=300, description="'İstanbul React Staj' gibi")
+    location: str = Field(default="Türkiye", max_length=200)
     session_id: str = Field(..., description="WebSocket session ID")
 
 class EventSearchRequest(BaseModel):
-    query: str = Field(..., min_length=2, description="'İstanbul kariyer fuarı' gibi")
-    location: str = Field(default="Türkiye")
+    query: str = Field(..., min_length=2, max_length=300, description="'İstanbul kariyer fuarı' gibi")
+    location: str = Field(default="Türkiye", max_length=200)
     session_id: str = Field(..., description="WebSocket session ID")
 
 class BuildCvRequest(BaseModel):
     session_id: str
     target_job_id: Optional[int] = None
-    extra_experience: str = ""
+    extra_experience: str = Field(default="", max_length=5000)
 
 class InterviewStartRequest(BaseModel):
     session_id: str
     job_id: Optional[int] = None
-    company_name: str = ""
-    job_title: str = ""
-    job_description: str = ""
+    company_name: str = Field(default="", max_length=300)
+    job_title: str = Field(default="", max_length=300)
+    job_description: str = Field(default="", max_length=10000)
     round_type: Literal["technical", "hr", "mixed"] = "mixed"
 
 class InterviewAnswerRequest(BaseModel):
     session_id: str
     question_id: int
-    question: str
-    question_type: str
-    hint: str
-    answer: str
-    company_name: str
-    job_title: str
+    question: str = Field(..., max_length=2000)
+    question_type: str = Field(..., max_length=50)
+    hint: str = Field(default="", max_length=2000)
+    answer: str = Field(..., max_length=5000)
+    company_name: str = Field(..., max_length=300)
+    job_title: str = Field(..., max_length=300)
 
 class OutreachRequest(BaseModel):
     session_id: str
-    company_name: str = Field(..., min_length=2)
-    job_title: str = ""
-    job_description: str = ""
+    company_name: str = Field(..., min_length=2, max_length=300)
+    job_title: str = Field(default="", max_length=300)
+    job_description: str = Field(default="", max_length=10000)
 
 class StrategyRequest(BaseModel):
     session_id: str
-    target_job: str = Field(..., min_length=3)
-    target_location: str = "Global"
+    target_job: str = Field(..., min_length=3, max_length=300)
+    target_location: str = Field(default="Global", max_length=200)
 
 # ─── Background Task İşlevleri ──────────────────────────────────────────────
 

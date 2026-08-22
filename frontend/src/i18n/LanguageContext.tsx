@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 
 type Language = 'tr' | 'en';
 
@@ -602,18 +602,23 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = language;
   }, [language]);
 
-  const setLanguage = (lang: Language) => setLanguageState(lang);
+  const setLanguage = useCallback((lang: Language) => setLanguageState(lang), []);
 
-  const t = (key: string): string => {
+  const t = useCallback((key: string): string => {
     if (!translations[key]) {
       console.warn(`Translation key not found: ${key}`);
       return key;
     }
     return translations[key][language] || translations[key]['en'];
-  };
+  }, [language]);
+
+  // LanguageContext neredeyse her bileşen tarafından tüketiliyor — value
+  // objesi her render'da yeniden oluşturulursa (memoize edilmeden) tüm
+  // tüketiciler gereksiz yere yeniden render olur.
+  const value = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t]);
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );

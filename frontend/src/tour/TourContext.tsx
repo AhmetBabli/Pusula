@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { TOUR_STEPS, TOUR_STORAGE_KEY, TourStep } from './tourSteps';
 import type { Tab } from '../types/tab';
 
@@ -100,7 +100,10 @@ export function TourProvider({ activeTab, onNavigate, autoStartIfNew = false, ch
     }
   }, [autoStartIfNew, start]);
 
-  const value: TourContextValue = {
+  // TourContext tüm dashboard'u sarıyor — value objesi memoize edilmeden her
+  // render'da yeniden oluşturulursa, App.tsx'in ~15 state'inden herhangi biri
+  // değiştiğinde (tur ile hiç ilgisi olmasa bile) tüm ağaç yeniden render olur.
+  const value: TourContextValue = useMemo(() => ({
     active,
     stepIndex,
     step,
@@ -112,7 +115,7 @@ export function TourProvider({ activeTab, onNavigate, autoStartIfNew = false, ch
     back,
     skip,
     finish,
-  };
+  }), [active, stepIndex, step, start, next, back, skip, finish]);
 
   return <TourContext.Provider value={value}>{children}</TourContext.Provider>;
 }

@@ -14,8 +14,17 @@ from backend.auth import verify_token
 router = APIRouter(tags=["WebSocket"])
 logger = logging.getLogger(__name__)
 
-# Aktif WebSocket bağlantıları: session_id → WebSocket
+# Aktif WebSocket bağlantıları: "{user_id}:{session_id}" → WebSocket
+# session_id istemcinin kendi ürettiği bir UUID — tek başına anahtar olarak
+# kullanmak, B kullanıcısının A'nın session_id'sini (tahmin/gözlem yoluyla)
+# kullanarak A'nın bağlantısını düşürüp A'ya giden verileri okumasına izin
+# veriyordu (oturum ele geçirme). Anahtara bağlanan JWT'nin user_id'sini de
+# katmak bunu engelliyor.
 _connections: dict[str, WebSocket] = {}
+
+
+def _connection_key(user_id: int, session_id: str) -> str:
+    return f"{user_id}:{session_id}"
 
 
 async def push_agent_event(
@@ -25,12 +34,15 @@ async def push_agent_event(
     step: str = "",
     progress: int = 0,
     data: Optional[dict] = None,
+    *,
+    user_id: int,
 ):
     """
-    Belirtilen session'a ajan durumu gönderir.
-    Herhangi bir ajan modülünden import edip çağrılabilir.
+    Belirtilen kullanıcının session'ına ajan durumu gönderir.
+    Herhangi bir ajan modülünden import edip çağrılabilir. `user_id` zorunlu
+    keyword-only argüman — çağıran taraf yanlışlıkla unutamasın diye.
     """
-    ws = _connections.get(session_id)
+    ws = _connections.get(_connection_key(user_id, session_id))
     if not ws:
         return  # Bağlantı yoksa sessizce geç
 
@@ -46,7 +58,7 @@ async def push_agent_event(
         await ws.send_text(json.dumps(payload, ensure_ascii=False))
     except Exception as e:
         logger.warning(f"[WS] session={session_id} mesaj gönderilemedi: {e}")
-        _connections.pop(session_id, None)
+        _connections.pop(_connection_key(user_id, session_id), None)
 
 
 @router.websocket("/ws/agents/{session_id}")
@@ -60,14 +72,16 @@ async def agent_websocket(websocket: WebSocket, session_id: str, token: str = Qu
     bu yüzden token burada query parametresi olarak doğrulanır.
     """
     try:
-        verify_token(token)
+        payload = verify_token(token)
+        user_id = int(payload["sub"])
     except Exception:
         await websocket.close(code=4401)
         return
 
     await websocket.accept()
-    _connections[session_id] = websocket
-    logger.info(f"[WS] Bağlandı: session={session_id}")
+    key = _connection_key(user_id, session_id)
+    _connections[key] = websocket
+    logger.info(f"[WS] Bağlandı: user={user_id} session={session_id}")
 
     try:
         # Bağlantı onayı gönder
@@ -90,8 +104,13 @@ async def agent_websocket(websocket: WebSocket, session_id: str, token: str = Qu
                 await websocket.send_text(json.dumps({"agent": "system", "status": "heartbeat"}))
 
     except WebSocketDisconnect:
-        logger.info(f"[WS] Bağlantı kesildi: session={session_id}")
+        logger.info(f"[WS] Bağlantı kesildi: user={user_id} session={session_id}")
     except Exception as e:
-        logger.error(f"[WS] Hata: session={session_id}, {e}")
+        logger.error(f"[WS] Hata: user={user_id} session={session_id}, {e}")
     finally:
-        _connections.pop(session_id, None)
+        # Yalnızca hâlâ bu bağlantıya ait olan girdiyi sil — bu bağlantı zaten
+        # devre dışı bırakılıp aynı anahtarı yeni bir bağlantı devraldıysa
+        # (ör. sekme yenileme sırasında kısa bir çakışma) o yeni bağlantıyı
+        # yanlışlıkla kaldırmayalım.
+        if _connections.get(key) is websocket:
+            _connections.pop(key, None)

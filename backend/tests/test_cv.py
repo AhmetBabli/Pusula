@@ -41,6 +41,38 @@ def test_list_cvs_only_returns_own(client, db_session):
     assert [c["title"] for c in list_b] == ["B'nin CV'si"]
 
 
+def test_list_cvs_handles_fractional_ats_score(client, db_session):
+    """ats_score veritabanında Float — Gemini 87.5 gibi ondalıklı bir puan
+    döndürdüğünde CVOut.ats_score (eskiden Optional[int]) Pydantic
+    doğrulamasını reddedip /cvs/ ucunu kalıcı olarak 500'e düşürüyordu."""
+    headers = _auth_headers(client, "cv-fractional-score@example.com")
+    _seed_cv(db_session, "cv-fractional-score@example.com", ats_score=87.5)
+
+    res = client.get("/api/cvs/", headers=headers)
+    assert res.status_code == 200
+    assert res.json()[0]["ats_score"] == 87.5
+
+
+def test_download_cv_pdf_requires_ownership(client, db_session, tmp_path):
+    """Eskiden /agents/cv/export-pdf/{session_id} istemcinin seçtiği bir
+    session_id'ye göre dosya sunuyordu, sahiplik doğrulamıyordu (IDOR) —
+    herhangi bir kullanıcı başkasının CV PDF'ini tahmin edip indirebiliyordu.
+    Yeni /cvs/{cv_id}/pdf ucu _get_own_cv_or_404 ile korunuyor."""
+    pdf_file = tmp_path / "sample.pdf"
+    pdf_file.write_bytes(b"%PDF-1.4 fake pdf content")
+
+    headers_owner = _auth_headers(client, "cv-pdf-owner@example.com")
+    headers_intruder = _auth_headers(client, "cv-pdf-intruder@example.com")
+    cv = _seed_cv(db_session, "cv-pdf-owner@example.com", file_path=str(pdf_file))
+
+    res_owner = client.get(f"/api/cvs/{cv.id}/pdf", headers=headers_owner)
+    assert res_owner.status_code == 200
+    assert res_owner.headers["content-type"] == "application/pdf"
+
+    res_intruder = client.get(f"/api/cvs/{cv.id}/pdf", headers=headers_intruder)
+    assert res_intruder.status_code == 404
+
+
 def test_get_cv_404_for_other_users_cv(client, db_session):
     headers_a = _auth_headers(client, "cv-owner@example.com")
     headers_b = _auth_headers(client, "cv-intruder@example.com")

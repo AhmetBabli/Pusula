@@ -3,6 +3,7 @@ import json
 import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -41,7 +42,7 @@ class CVOut(BaseModel):
     title: str
     variant_type: str
     extracted_text: Optional[str] = None
-    ats_score: Optional[int] = 0
+    ats_score: Optional[float] = 0.0
     ats_feedback: Optional[str] = None
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
@@ -125,6 +126,21 @@ def _get_own_cv_or_404(db: Session, cv_id: int, current_user: UserProfile) -> CV
 def get_cv(cv_id: int, db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
     """CV detayını getir."""
     return _get_own_cv_or_404(db, cv_id, current_user)
+
+@router.get("/{cv_id}/pdf")
+def download_cv_pdf(cv_id: int, db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
+    """CV PDF'ini indir — sahiplik kontrolü _get_own_cv_or_404 ile yapılır.
+    Eskiden /agents/cv/export-pdf/{session_id} istemcinin seçtiği bir
+    session_id'ye göre dosya sunuyordu; herhangi bir kullanıcı başka birinin
+    session_id'sini tahmin ederek onun CV'sini indirebiliyordu (IDOR)."""
+    cv = _get_own_cv_or_404(db, cv_id, current_user)
+    if not cv.file_path or not os.path.exists(cv.file_path):
+        raise HTTPException(404, "Bu CV için PDF bulunamadı.")
+    return FileResponse(
+        path=cv.file_path,
+        media_type="application/pdf",
+        filename=f"kariyer_cv_{cv_id}.pdf",
+    )
 
 @router.post("/upload", status_code=202)
 async def upload_cv(

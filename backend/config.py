@@ -18,7 +18,10 @@ class Settings:
     # Project
     APP_NAME: str = "Kariyer Ajanı"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+    # "fail closed": DEBUG env değişkeni unutulursa (ör. bir production deploy'da)
+    # uygulama üretim moduna düşsün, yanlışlıkla debug modunda açılıp CORS'u
+    # wildcard'a, /docs'u herkese açık bırakmasın.
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # Database
     DATABASE_TYPE: str = os.getenv("DATABASE_TYPE", "sqlite")  # sqlite, postgresql

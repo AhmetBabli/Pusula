@@ -275,11 +275,13 @@ export function AgentOrchestrator() {
     }
   };
 
-  const handleDownloadCv = async (cvSessionId: string) => {
+  const handleDownloadCv = async (cvId: number) => {
     setActionError(null);
     try {
       const token = getToken() || '';
-      const res = await fetch(`${API}/cv/export-pdf/${cvSessionId}`, {
+      // Sahiplik kontrollü uç: /api/cvs/{cv_id}/pdf — eskiden session_id'ye
+      // göre sunulan /agents/cv/export-pdf/{session_id} kaldırıldı (IDOR).
+      const res = await fetch(`/api/cvs/${cvId}/pdf`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {
@@ -290,7 +292,7 @@ export function AgentOrchestrator() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `kariyer_cv_${cvSessionId.slice(0, 8)}.pdf`;
+      a.download = `kariyer_cv_${cvId}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -465,9 +467,9 @@ export function AgentOrchestrator() {
                   {t('agents_cv_start_button')}
                 </button>
               )}
-              {agents.cv_architect.status === 'done' && agents.cv_architect.data?.session_id && (
+              {agents.cv_architect.status === 'done' && agents.cv_architect.data?.cv_id && (
                 <button
-                  onClick={() => handleDownloadCv(agents.cv_architect.data.session_id as string)}
+                  onClick={() => handleDownloadCv(agents.cv_architect.data.cv_id as number)}
                   className="w-full flex items-center justify-center gap-2 py-3 text-sm font-label text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 active:scale-[0.98] transition-all duration-150"
                 >
                   <Download className="w-4 h-4" /> {t('agents_cv_download')}

@@ -9,7 +9,6 @@ import asyncio
 from pathlib import Path
 from typing import Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Response
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -80,14 +79,14 @@ async def _run_web_search(session_id: str, query: str, location: str, db_user_id
     from backend.database import SessionLocal
     from backend.schemas.agent_contracts import ScrapedJobContract
 
-    await push_agent_event(session_id, "web_search", "running", "Gemini Grounding aktif...", 10)
+    await push_agent_event(session_id, "web_search", "running", "Gemini Grounding aktif...", 10, user_id=db_user_id)
     try:
         with SessionLocal() as db:
             requester = db.query(UserProfile).filter(UserProfile.id == db_user_id).first()
             requester_api_key = requester.gemini_api_key if requester else None
 
         jobs = await search_jobs_live(query, location, api_key=requester_api_key)
-        await push_agent_event(session_id, "web_search", "running", f"{len(jobs)} ilan bulundu, DB'ye kaydediliyor...", 70)
+        await push_agent_event(session_id, "web_search", "running", f"{len(jobs)} ilan bulundu, DB'ye kaydediliyor...", 70, user_id=db_user_id)
 
         saved = 0
         with SessionLocal() as db:
@@ -105,18 +104,19 @@ async def _run_web_search(session_id: str, query: str, location: str, db_user_id
         await push_agent_event(
             session_id, "web_search", "done",
             f"Tamamlandı: {saved} yeni ilan kaydedildi.", 100,
-            data={"saved_count": saved, "found_count": len(jobs)}
+            data={"saved_count": saved, "found_count": len(jobs)},
+            user_id=db_user_id,
         )
     except Exception as e:
         logger.error(f"[Agents] web_search hatası: {e}")
-        await push_agent_event(session_id, "web_search", "failed", str(e), 0)
+        await push_agent_event(session_id, "web_search", "failed", str(e), 0, user_id=db_user_id)
 
 
 async def _run_event_search(session_id: str, query: str, location: str, db_user_id: int):
     from backend.ai.web_search_agent import search_events_live
     from backend.database import SessionLocal
 
-    await push_agent_event(session_id, "event_search", "running", "Gemini Grounding aktif...", 10)
+    await push_agent_event(session_id, "event_search", "running", "Gemini Grounding aktif...", 10, user_id=db_user_id)
     try:
         with SessionLocal() as db:
             requester = db.query(UserProfile).filter(UserProfile.id == db_user_id).first()
@@ -128,7 +128,7 @@ async def _run_event_search(session_id: str, query: str, location: str, db_user_
             )
 
         events = await search_events_live(query, location, user_context=user_context, api_key=requester_api_key)
-        await push_agent_event(session_id, "event_search", "running", f"{len(events)} etkinlik bulundu, DB'ye kaydediliyor...", 70)
+        await push_agent_event(session_id, "event_search", "running", f"{len(events)} etkinlik bulundu, DB'ye kaydediliyor...", 70, user_id=db_user_id)
 
         saved = 0
         with SessionLocal() as db:
@@ -153,18 +153,19 @@ async def _run_event_search(session_id: str, query: str, location: str, db_user_
         await push_agent_event(
             session_id, "event_search", "done",
             f"Tamamlandı: {saved} yeni etkinlik kaydedildi.", 100,
-            data={"saved_count": saved, "found_count": len(events)}
+            data={"saved_count": saved, "found_count": len(events)},
+            user_id=db_user_id,
         )
     except Exception as e:
         logger.error(f"[Agents] event_search hatası: {e}")
-        await push_agent_event(session_id, "event_search", "failed", str(e), 0)
+        await push_agent_event(session_id, "event_search", "failed", str(e), 0, user_id=db_user_id)
 
 
 async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[int], extra_exp: str):
     from backend.ai.cv_architect_agent import fetch_github_repos, build_ats_cv, export_cv_to_pdf
     from backend.database import SessionLocal
 
-    await push_agent_event(session_id, "cv_architect", "running", "Kullanıcı profili okunuyor...", 5)
+    await push_agent_event(session_id, "cv_architect", "running", "Kullanıcı profili okunuyor...", 5, user_id=user_id)
     try:
         with SessionLocal() as db:
             user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
@@ -172,10 +173,10 @@ async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[i
                 raise ValueError("Kullanıcı profili bulunamadı.")
             job = db.query(Job).filter(Job.id == target_job_id).first() if target_job_id else None
 
-        await push_agent_event(session_id, "cv_architect", "running", "GitHub repoları çekiliyor...", 15)
+        await push_agent_event(session_id, "cv_architect", "running", "GitHub repoları çekiliyor...", 15, user_id=user_id)
         repos = await fetch_github_repos(user.github_url or "")
 
-        await push_agent_event(session_id, "cv_architect", "running", f"{len(repos)} repo analiz edildi. CV üretiliyor...", 50)
+        await push_agent_event(session_id, "cv_architect", "running", f"{len(repos)} repo analiz edildi. CV üretiliyor...", 50, user_id=user_id)
         cv_markdown = await build_ats_cv(
             user_name=user.full_name,
             email=user.email,
@@ -189,7 +190,7 @@ async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[i
             api_key=user.gemini_api_key,
         )
 
-        await push_agent_event(session_id, "cv_architect", "running", "PDF oluşturuluyor...", 80)
+        await push_agent_event(session_id, "cv_architect", "running", "PDF oluşturuluyor...", 80, user_id=user_id)
 
         settings.CV_STORE_PATH.mkdir(parents=True, exist_ok=True)
         pdf_path = str(settings.CV_STORE_PATH / f"cv_architect_{session_id}.pdf")
@@ -217,18 +218,22 @@ async def _run_build_cv(session_id: str, user_id: int, target_job_id: Optional[i
         await push_agent_event(
             session_id, "cv_architect", "done",
             "CV tamamlandı! PDF indirilebilir.", 100,
-            data={"cv_id": cv_id, "pdf_path": pdf_path, "session_id": session_id}
+            # pdf_path artık istemciye gönderilmiyor — sunucudaki dosya yolunu
+            # ifşa etmenin bir anlamı yok, indirme artık cv_id ile
+            # /cvs/{cv_id}/pdf üzerinden (sahiplik kontrollü) yapılıyor.
+            data={"cv_id": cv_id, "session_id": session_id},
+            user_id=user_id,
         )
     except Exception as e:
         logger.error(f"[Agents] cv_architect hatası: {e}")
-        await push_agent_event(session_id, "cv_architect", "failed", str(e), 0)
+        await push_agent_event(session_id, "cv_architect", "failed", str(e), 0, user_id=user_id)
 
 
 async def _run_outreach(session_id: str, company_name: str, job_title: str, job_desc: str, user_id: int):
     from backend.database import SessionLocal
     from backend.ai.gemini_client import _call_model_async_json
 
-    await push_agent_event(session_id, "outreach", "running", "Profil ve CV okunuyor...", 10)
+    await push_agent_event(session_id, "outreach", "running", "Profil ve CV okunuyor...", 10, user_id=user_id)
     try:
         with SessionLocal() as db:
             user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
@@ -238,7 +243,7 @@ async def _run_outreach(session_id: str, company_name: str, job_title: str, job_
         cv_text = cv.extracted_text[:1500] if cv else ""
         skills_str = ", ".join(user.skills or [])
 
-        await push_agent_event(session_id, "outreach", "running", "Taslaklar oluşturuluyor...", 40)
+        await push_agent_event(session_id, "outreach", "running", "Taslaklar oluşturuluyor...", 40, user_id=user_id)
 
         # Cold email + LinkedIn DM'i tek istekte üretiyoruz — ayrı ayrı
         # gönderilen iki ardışık çağrı, aynı dakika içinde Gemini'nin
@@ -263,11 +268,12 @@ CV özeti: {cv_text[:300]}
 
         await push_agent_event(
             session_id, "outreach", "done", "Taslaklar hazır!", 100,
-            data={"cold_email": cold_email, "linkedin_dm": linkedin_dm}
+            data={"cold_email": cold_email, "linkedin_dm": linkedin_dm},
+            user_id=user_id,
         )
     except Exception as e:
         logger.error(f"[Agents] outreach hatası: {e}")
-        await push_agent_event(session_id, "outreach", "failed", str(e), 0)
+        await push_agent_event(session_id, "outreach", "failed", str(e), 0, user_id=user_id)
 
 
 async def _run_strategy(session_id: str, target_job: str, target_location: str, user_id: int):
@@ -275,7 +281,7 @@ async def _run_strategy(session_id: str, target_job: str, target_location: str, 
     from backend.ai.cv_architect_agent import fetch_github_repos
     from backend.database import SessionLocal
 
-    await push_agent_event(session_id, "strategy", "running", "Profil ve GitHub analizi yapılıyor...", 10)
+    await push_agent_event(session_id, "strategy", "running", "Profil ve GitHub analizi yapılıyor...", 10, user_id=user_id)
     try:
         with SessionLocal() as db:
             user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
@@ -284,7 +290,7 @@ async def _run_strategy(session_id: str, target_job: str, target_location: str, 
         repos = await fetch_github_repos(user.github_url or "")
         repo_summary = ", ".join([f"{r['name']} ({', '.join(r.get('languages') or [])})" for r in repos[:10]])
 
-        await push_agent_event(session_id, "strategy", "running", "Yol haritası ve pazar analizi oluşturuluyor...", 50)
+        await push_agent_event(session_id, "strategy", "running", "Yol haritası ve pazar analizi oluşturuluyor...", 50, user_id=user_id)
         
         strategy = await generate_career_strategy(
             current_skills=user.skills or [],
@@ -298,11 +304,12 @@ async def _run_strategy(session_id: str, target_job: str, target_location: str, 
 
         await push_agent_event(
             session_id, "strategy", "done", "Kariyer stratejin hazır!", 100,
-            data=strategy
+            data=strategy,
+            user_id=user_id,
         )
     except Exception as e:
         logger.error(f"[Agents] strategy hatası: {e}")
-        await push_agent_event(session_id, "strategy", "failed", str(e), 0)
+        await push_agent_event(session_id, "strategy", "failed", str(e), 0, user_id=user_id)
 
 
 # ─── HTTP Endpoints ─────────────────────────────────────────────────────────
@@ -482,14 +489,6 @@ async def career_strategy(
     return {"status": "started", "session_id": req.session_id}
 
 
-@router.get("/cv/export-pdf/{session_id}")
-def export_pdf(session_id: str, current_user: UserProfile = Depends(get_current_user)):
-    """Üretilen CV PDF'ini indir (giriş yapmış olmak zorunlu)."""
-    pdf_path = settings.CV_STORE_PATH / f"cv_architect_{session_id}.pdf"
-    if not pdf_path.exists():
-        raise HTTPException(404, "PDF bulunamadı. Önce /build-cv endpoint'ini çağırın.")
-    return FileResponse(
-        path=str(pdf_path),
-        media_type="application/pdf",
-        filename=f"kariyer_cv_{session_id[:8]}.pdf",
-    )
+# Not: CV PDF indirme ucu buradan kaldırıldı — session_id istemcinin kendi
+# seçtiği bir değerdi, sahiplik doğrulaması yapılmıyordu (IDOR). Artık
+# GET /cvs/{cv_id}/pdf üzerinden, sahiplik kontrolüyle sunuluyor (bkz. cv.py).

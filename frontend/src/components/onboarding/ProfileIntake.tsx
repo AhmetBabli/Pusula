@@ -1,9 +1,11 @@
 import React, { useEffect, useId, useState } from 'react';
 import { motion } from 'framer-motion';
-import { GraduationCap, Code, Target, Languages, X, ArrowRight, AlertCircle } from 'lucide-react';
+import { GraduationCap, Code, Target, Languages, X, ArrowRight, AlertCircle, Briefcase, Award } from 'lucide-react';
 import { getProfile, updateProfile } from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { UNIVERSITY_SUGGESTIONS, SKILL_SUGGESTIONS, SECTOR_SUGGESTIONS, LANGUAGE_SUGGESTIONS } from '../../data/suggestions';
+import { EntryListEditor } from '../ui/EntryListEditor';
+import { getWorkExperienceFields, getCertificateFields, summarizeExperience, summarizeCertificate } from '../ui/experienceFieldConfig';
 
 interface IntakeData {
   university: string;
@@ -15,6 +17,8 @@ interface IntakeData {
   linkedin_url: string;
   github_url: string;
   summary: string;
+  work_experiences: Record<string, any>[];
+  certificates: Record<string, any>[];
 }
 
 const EMPTY: IntakeData = {
@@ -27,6 +31,8 @@ const EMPTY: IntakeData = {
   linkedin_url: '',
   github_url: '',
   summary: '',
+  work_experiences: [],
+  certificates: [],
 };
 
 interface ProfileIntakeProps {
@@ -175,6 +181,8 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
           linkedin_url: p.linkedin_url || '',
           github_url: p.github_url || '',
           summary: p.summary || '',
+          work_experiences: p.work_experiences || [],
+          certificates: p.certificates || [],
         });
       })
       .catch(() => {})
@@ -271,6 +279,32 @@ export const ProfileIntake: React.FC<ProfileIntakeProps> = ({ onComplete }) => {
               />
             </div>
           </div>
+
+          <EntryListEditor
+            icon={Briefcase}
+            title={t('experience_section_title')}
+            fields={getWorkExperienceFields(t)}
+            items={data.work_experiences}
+            onChange={(v) => setData({ ...data, work_experiences: v })}
+            renderSummary={(item) => summarizeExperience(item, t)}
+            addLabel={t('experience_add_label')}
+            emptyLabel={t('experience_empty_label')}
+            saveLabel={t('entry_save')}
+            cancelLabel={t('entry_cancel')}
+          />
+
+          <EntryListEditor
+            icon={Award}
+            title={t('certificate_section_title')}
+            fields={getCertificateFields(t)}
+            items={data.certificates}
+            onChange={(v) => setData({ ...data, certificates: v })}
+            renderSummary={summarizeCertificate}
+            addLabel={t('certificate_add_label')}
+            emptyLabel={t('certificate_empty_label')}
+            saveLabel={t('entry_save')}
+            cancelLabel={t('entry_cancel')}
+          />
 
           <div className="space-y-2">
             <label htmlFor="intake-summary" className="font-label text-sm text-on-surface-variant block">{t('intake_summary')}</label>

@@ -4,7 +4,7 @@ from backend.database import get_db
 from backend.models.user import UserProfile
 from backend.auth import get_current_user
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -21,6 +21,8 @@ class ProfileUpdate(BaseModel):
     github_url: Optional[str] = None
     linkedin_data: Optional[str] = None
     summary: Optional[str] = None
+    work_experiences: Optional[List[Dict[str, Any]]] = None
+    certificates: Optional[List[Dict[str, Any]]] = None
     onboarding_completed: Optional[bool] = None
     gemini_api_key: Optional[str] = None
 
@@ -40,6 +42,8 @@ class UserProfileOut(BaseModel):
     github_url: Optional[str] = None
     linkedin_data: Optional[str] = None
     summary: Optional[str] = None
+    work_experiences: List[Dict[str, Any]] = []
+    certificates: List[Dict[str, Any]] = []
     onboarding_completed: bool = False
     has_gemini_api_key: bool = False
 

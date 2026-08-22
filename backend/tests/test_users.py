@@ -81,3 +81,25 @@ def test_update_profile_persists_linkedin_data(client):
 
     profile = client.get("/api/users/profile", headers=headers).json()
     assert profile["linkedin_data"] == raw
+
+
+def test_update_profile_persists_work_experiences_and_certificates(client):
+    headers = _auth_headers(client, "profile-experience@example.com")
+    work_experiences = [
+        {"title": "Yazılım Stajyeri", "company": "X Teknoloji", "start_date": "2025-06", "end_date": "2025-08", "current": False, "description": "Backend API geliştirme."},
+        {"title": "Junior Developer", "company": "Y A.Ş.", "start_date": "2025-09", "end_date": "", "current": True, "description": ""},
+    ]
+    certificates = [
+        {"name": "AWS Cloud Practitioner", "issuer": "Amazon", "date": "2025-03"},
+    ]
+
+    res = client.patch(
+        "/api/users/profile",
+        json={"work_experiences": work_experiences, "certificates": certificates},
+        headers=headers,
+    )
+    assert res.status_code == 200
+
+    profile = client.get("/api/users/profile", headers=headers).json()
+    assert profile["work_experiences"] == work_experiences
+    assert profile["certificates"] == certificates

@@ -37,6 +37,13 @@ class UserProfile(Base):
     linkedin_data = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)  # Kısa biyografi
 
+    # Yapılandırılmış iş deneyimi/sertifika girdileri — CV üretiminde serbest
+    # metne çevrilip prompt'a eklenir (bkz. routers/cv.py). Her öğe bir dict:
+    # work_experiences: {title, company, start_date, end_date, current, description}
+    # certificates: {name, issuer, date}
+    work_experiences = Column(JSON, default=list)
+    certificates = Column(JSON, default=list)
+
     # Kullanıcının kendi Gemini API key'i (şifreli) — her kullanıcı kendi
     # kotasını kullansın diye. Boşsa backend'in paylaşılan .env key'ine düşülür.
     _gemini_api_key = Column("gemini_api_key", String(500), nullable=True)

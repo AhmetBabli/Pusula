@@ -95,6 +95,39 @@ def test_generate_cv_merges_linkedin_data_into_experience(client, monkeypatch):
     assert "X Şirketi - Stajyer" in captured["experience"]
 
 
+def test_generate_cv_merges_structured_experience_and_certificates(client, monkeypatch):
+    headers = _auth_headers(client, "cv-gen-structured@example.com")
+    client.patch(
+        "/api/users/profile",
+        json={
+            "work_experiences": [
+                {"title": "Yazılım Stajyeri", "company": "Acme A.Ş.", "start_date": "2025-06", "end_date": "2025-08", "current": False, "description": "API geliştirme."},
+            ],
+            "certificates": [
+                {"name": "AWS Cloud Practitioner", "issuer": "Amazon", "date": "2025-03"},
+            ],
+        },
+        headers=headers,
+    )
+
+    captured = {}
+
+    async def fake_generate_cv_content(**kwargs):
+        captured.update(kwargs)
+        return "İçerik"
+
+    monkeypatch.setattr("backend.ai.gemini_client.generate_cv_content", fake_generate_cv_content)
+
+    res = client.post(
+        "/api/cvs/generate",
+        json={"variant_type": "general", "skills": ["Python"], "experience": "Kendi yazdığım deneyim."},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert "Acme A.Ş." in captured["experience"]
+    assert "AWS Cloud Practitioner" in captured["experience"]
+
+
 def test_delete_cv_removes_it(client, db_session):
     headers = _auth_headers(client, "cv-del@example.com")
     cv = _seed_cv(db_session, "cv-del@example.com")

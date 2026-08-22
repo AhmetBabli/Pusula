@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Check, Save, X, LogOut, KeyRound, ExternalLink, CheckCircle2, Pencil, Eye, EyeOff, Compass, Github, Linkedin } from 'lucide-react';
+import { Mail, Check, Save, X, LogOut, KeyRound, ExternalLink, CheckCircle2, Pencil, Eye, EyeOff, Compass, Github, Linkedin, Briefcase, Award } from 'lucide-react';
 import { updateProfile } from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useTour } from '../../tour/TourContext';
+import { EntryListEditor } from '../ui/EntryListEditor';
+import { getWorkExperienceFields, getCertificateFields, summarizeExperience, summarizeCertificate } from '../ui/experienceFieldConfig';
 
 export interface UserProfile {
   id?: number;
@@ -20,6 +22,8 @@ export interface UserProfile {
   github_url?: string;
   linkedin_data?: string;
   summary?: string;
+  work_experiences?: Record<string, any>[];
+  certificates?: Record<string, any>[];
   has_gemini_api_key?: boolean;
 }
 
@@ -35,6 +39,8 @@ const EMPTY_PROFILE: UserProfile = {
   github_url: '',
   linkedin_data: '',
   summary: '',
+  work_experiences: [],
+  certificates: [],
 };
 
 interface ProfileViewProps {
@@ -110,6 +116,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
         github_url: formData.github_url,
         linkedin_data: formData.linkedin_data,
         summary: formData.summary,
+        work_experiences: formData.work_experiences,
+        certificates: formData.certificates,
       };
       // Sadece kullanıcı gerçekten yeni bir key yazdıysa gönder — boşsa
       // mevcut kayıtlı key'i yanlışlıkla silmeyelim.
@@ -342,6 +350,32 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onSave, o
                   </div>
                 </div>
               </div>
+
+              <EntryListEditor
+                icon={Briefcase}
+                title={t('experience_section_title')}
+                fields={getWorkExperienceFields(t)}
+                items={formData.work_experiences || []}
+                onChange={(v) => setFormData({ ...formData, work_experiences: v })}
+                renderSummary={(item) => summarizeExperience(item, t)}
+                addLabel={t('experience_add_label')}
+                emptyLabel={t('experience_empty_label')}
+                saveLabel={t('entry_save')}
+                cancelLabel={t('entry_cancel')}
+              />
+
+              <EntryListEditor
+                icon={Award}
+                title={t('certificate_section_title')}
+                fields={getCertificateFields(t)}
+                items={formData.certificates || []}
+                onChange={(v) => setFormData({ ...formData, certificates: v })}
+                renderSummary={summarizeCertificate}
+                addLabel={t('certificate_add_label')}
+                emptyLabel={t('certificate_empty_label')}
+                saveLabel={t('entry_save')}
+                cancelLabel={t('entry_cancel')}
+              />
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-5 mt-5 border-t border-outline-variant/10">

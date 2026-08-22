@@ -188,6 +188,27 @@ async def upload_cv(
         "extracted_length": len(extracted_text)
     }
 
+def _format_structured_experience(current_user: UserProfile) -> str:
+    """Profildeki yapılandırılmış iş deneyimi/sertifika girdilerini (bkz.
+    ProfileIntake/ProfileView'daki deneyim formu) CV üretim prompt'una
+    eklenecek okunabilir bir metne çevirir."""
+    parts = []
+    if current_user.work_experiences:
+        lines = ["İş Deneyimleri:"]
+        for exp in current_user.work_experiences:
+            period = f"{exp.get('start_date') or ''} - {'Devam ediyor' if exp.get('current') else (exp.get('end_date') or '')}"
+            lines.append(f"- {exp.get('title', '')} @ {exp.get('company', '')} ({period.strip(' -')})")
+            if exp.get('description'):
+                lines.append(f"  {exp['description']}")
+        parts.append("\n".join(lines))
+    if current_user.certificates:
+        lines = ["Sertifikalar:"]
+        for cert in current_user.certificates:
+            lines.append(f"- {cert.get('name', '')} — {cert.get('issuer', '')} ({cert.get('date', '')})")
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts)
+
+
 @router.post("/generate", response_model=CVOut)
 async def generate_cv(
     req: CVGenerateRequest,
@@ -203,6 +224,9 @@ async def generate_cv(
     experience = req.experience
     if current_user.linkedin_data:
         experience = f"{experience}\n\nLinkedIn Profilinden:\n{current_user.linkedin_data}".strip()
+    structured = _format_structured_experience(current_user)
+    if structured:
+        experience = f"{experience}\n\n{structured}".strip()
 
     # Bu endpoint de yavaş çalışacaktır ancak kullanıcı bir şeyin "üretilmesini"
     # talep ettiği için burada beklemesi (progress bar ile) kabul edilebilir.

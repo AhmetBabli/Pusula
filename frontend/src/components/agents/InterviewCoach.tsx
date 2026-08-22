@@ -90,6 +90,7 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
   const silenceTimerRef = useRef<any>(null);
   const autoSubmitPendingRef = useRef(false);
   const submitAnswerRef = useRef<(answerOverride?: string) => void>(() => {});
+  const hasAutoStartedResearchRef = useRef(false);
 
   // useRef ile: component gövdesinde crypto.randomUUID() çağırmak her
   // render'da (her interim transkript güncellemesinde bile) yeni bir ID
@@ -252,10 +253,19 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
 
   // Yeni soru geldiğinde: sesli sor, bitince otomatik dinlemeye geç (sesli sohbet akışı)
   useEffect(() => {
+    // speechSynthesis iptal edilebilir değil (synth.cancel() zaten sadece bir
+    // sonraki speakQuestion çağrısında tetiklenir) — StrictMode'un mount→
+    // cleanup→remount döngüsünde ESKİ bir montajın .then'i, yeni montajın
+    // konuşması bittikten SONRA bile tetiklenebilir ve startListeningAuto'yu
+    // yanlış zamanda ikinci kez çağırabilirdi. cancelled bayrağı bunu engeller.
+    let cancelled = false;
     if (phase === 'interview' && questions[currentIdx]) {
-      speakQuestion(questions[currentIdx].question).then(startListeningAuto);
+      speakQuestion(questions[currentIdx].question).then(() => {
+        if (!cancelled) startListeningAuto();
+      });
     }
     return () => {
+      cancelled = true;
       audioRef.current?.pause();
       clearSilenceTimer();
       autoSubmitPendingRef.current = false;
@@ -280,9 +290,16 @@ export function InterviewCoach({ companyName = '', jobTitle = '', jobDescription
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, setupStep]);
 
-  // Şirket + pozisyon dışarıdan (props) zaten geldiyse sohbeti atlayıp direkt araştırmaya başla
+  // Şirket + pozisyon dışarıdan (props) zaten geldiyse sohbeti atlayıp direkt
+  // araştırmaya başla. hasAutoStartedResearchRef, StrictMode'un geliştirmede
+  // mount→cleanup→remount döngüsünde bu "sadece bir kez" efektini iki kez
+  // çalıştırıp aynı /interview/start isteğini iki kez tetiklemesini engeller
+  // (ref, remount'lar arasında sıfırlanmaz).
   useEffect(() => {
-    if (setupStep === 'researching') startInterview();
+    if (setupStep === 'researching' && !hasAutoStartedResearchRef.current) {
+      hasAutoStartedResearchRef.current = true;
+      startInterview();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

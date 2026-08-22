@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MotionConfig } from 'framer-motion';
 import { Sun, Moon, Globe } from 'lucide-react';
 import { useLanguage } from './i18n/LanguageContext';
@@ -39,6 +39,10 @@ type AppState = 'loading' | 'onboarding' | 'auth' | 'intake' | 'dashboard';
 // Sıra, Navigation.tsx'in sabit 7 bölümüyle (Dashboard/Pazar Analizi/Başvurular/
 // Etkinlikler/Portföy/Gelen Kutusu/Ajan Merkezi) birebir eşleşmeli.
 const SIDEBAR_TABS: Tab[] = ['dashboard', 'jobs', 'applications', 'events', 'cv', 'inbox', 'agents', 'interview'];
+
+// Header memo() ile sarılı — her render'da yeni bir {} literal'i geçmek
+// memo()'yu anlamsız kılardı (referans her zaman "değişmiş" görünürdü).
+const EMPTY_USER_PROFILE = {};
 
 /* ── GLOBAL FOOTER ── */
 const Footer = () => {
@@ -261,8 +265,15 @@ const App: React.FC = () => {
   };
 
   const handleUpdateEventStatus = async (eventId: number, status: string) => {
-    await updateEventStatus(eventId, status);
-    await refreshEvents();
+    // EventsView'daki çağıran (EventStatusActions) sadece bir "finally" ile
+    // yükleniyor state'ini temizliyor, hatayı yakalamıyor — burada yakalanmazsa
+    // yakalanmamış bir promise reddi olarak kalırdı.
+    try {
+      await updateEventStatus(eventId, status);
+      await refreshEvents();
+    } catch (err) {
+      console.error('Update event status error:', err);
+    }
   };
 
   const handleMarkInboxRead = async (itemId: number) => {
@@ -340,8 +351,14 @@ const App: React.FC = () => {
   };
 
   const handleMarkResponded = async (id: number) => {
-    await markResponded(id);
-    await refreshApplications();
+    // FollowupBox'taki "Yanıt Aldım" düğmesi bu çağrıyı hiç yakalamıyor
+    // (bare onClick) — burada yakalanmazsa yakalanmamış bir promise reddi olurdu.
+    try {
+      await markResponded(id);
+      await refreshApplications();
+    } catch (err) {
+      console.error('Mark responded error:', err);
+    }
   };
 
   const handleUpdateOutcome = async (id: number, outcome: string) => {
@@ -351,18 +368,33 @@ const App: React.FC = () => {
   };
 
   const handleCvUpload = async (file: File, title: string, variant: string) => {
-    await uploadCV(file, title, variant);
-    await refreshCvs();
+    // CVView'daki çağıranlar (handleUpload, ve doğrudan onClick'ler) hiçbiri
+    // bu çağrıları yakalamıyor — burada yakalanmazsa yakalanmamış bir promise
+    // reddi olurdu (ör. yükleme modalı hata olduğunda sonsuza dek açık kalırdı).
+    try {
+      await uploadCV(file, title, variant);
+      await refreshCvs();
+    } catch (err) {
+      console.error('CV upload error:', err);
+    }
   };
 
   const handleCvDelete = async (id: number) => {
-    await deleteCV(id);
-    await refreshCvs();
+    try {
+      await deleteCV(id);
+      await refreshCvs();
+    } catch (err) {
+      console.error('CV delete error:', err);
+    }
   };
 
   const handleCvSetDefault = async (id: number) => {
-    await setDefaultCV(id);
-    await refreshCvs();
+    try {
+      await setDefaultCV(id);
+      await refreshCvs();
+    } catch (err) {
+      console.error('CV set default error:', err);
+    }
   };
 
   const handleLinkGmail = async (email: string, appPassword: string) => {
@@ -400,6 +432,16 @@ const App: React.FC = () => {
   const handleApproveOutreach = async (outreachId: number, targetEmail: string) => {
     return sendOutreach(outreachId, targetEmail);
   };
+
+  // Header/Navigation memo() ile sarılı — App her render'da bunlara yeni
+  // referanslı inline fonksiyonlar geçerse memo() anlamsız kalır (bkz.
+  // EMPTY_USER_PROFILE, aynı sorunun obje-literal karşılığı).
+  const handleProfileClick = useCallback(() => setTab('profile'), []);
+  const handleToggleSidebar = useCallback(() => setSideOpen((prev) => !prev), []);
+  const handleNavChange = useCallback((idx: number) => {
+    setTab(SIDEBAR_TABS[idx]);
+    setSideOpen(false);
+  }, []);
 
   const isSyncing = syncTask.status === 'running' || syncTask.status === 'pending';
 
@@ -482,7 +524,7 @@ const App: React.FC = () => {
               <aside className={`fixed lg:static top-0 left-0 h-full z-40 shrink-0 transition-transform duration-300 ${sideOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                 <Navigation
                   activeIndex={SIDEBAR_TABS.indexOf(tab)}
-                  onChange={(idx: number) => { setTab(SIDEBAR_TABS[idx]); setSideOpen(false); }}
+                  onChange={handleNavChange}
                   isAuthenticated={true}
                 />
               </aside>
@@ -491,11 +533,11 @@ const App: React.FC = () => {
               <div className="flex-1 flex flex-col min-h-screen overflow-auto relative z-10">
                 {/* Topbar */}
                 <Header
-                  userProfile={userProfile || {}}
-                  onProfileClick={(action) => setTab('profile')}
+                  userProfile={userProfile || EMPTY_USER_PROFILE}
+                  onProfileClick={handleProfileClick}
                   isLoading={false}
                   isSidebarOpen={sideOpen}
-                  onToggleSidebar={() => setSideOpen(!sideOpen)}
+                  onToggleSidebar={handleToggleSidebar}
                 />
 
                 {/* Page */}

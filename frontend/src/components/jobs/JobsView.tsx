@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Briefcase, Search, MapPin, Building, Star, ExternalLink, Activity, AlertCircle, Compass } from 'lucide-react';
 import CyberModal from '../ui/CyberModal';
@@ -107,7 +107,10 @@ function JobsView({ jobs, isLoading, onJobAction }: JobsViewProps) {
     }
   };
 
-  const filteredJobs = jobs
+  // Beş zincirlenmiş filter + sort + dört Set/localeCompare tahsisi — hepsi
+  // useMemo olmadan render gövdesinde olsaydı arama kutusuna her karakter
+  // girildiğinde (jobs listesi hiç değişmese bile) yeniden hesaplanırdı.
+  const filteredJobs = useMemo(() => jobs
     .filter(job => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -135,29 +138,32 @@ function JobsView({ jobs, isLoading, onJobAction }: JobsViewProps) {
       }
       if (sortBy === 'company') return (a.company || '').localeCompare(b.company || '');
       return 0;
-    });
+    }), [jobs, searchQuery, filterSource, filterStatus, filterType, filterCity, sortBy]);
 
-  const sources = [...new Set(jobs.map(j => j.source).filter(Boolean))];
-  const statuses = [...new Set(jobs.map(j => j.status).filter(Boolean))];
-  const types = [...new Set(jobs.map(j => j.job_type).filter(Boolean))];
-  const cities = [...new Set(jobs.map(j => cityFromLocation(j.location)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+  const sources = useMemo(() => [...new Set(jobs.map(j => j.source).filter(Boolean))], [jobs]);
+  const statuses = useMemo(() => [...new Set(jobs.map(j => j.status).filter(Boolean))], [jobs]);
+  const types = useMemo(() => [...new Set(jobs.map(j => j.job_type).filter(Boolean))], [jobs]);
+  const cities = useMemo(
+    () => [...new Set(jobs.map(j => cityFromLocation(j.location)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
+    [jobs]
+  );
 
-  const sourceOptions = [
+  const sourceOptions = useMemo(() => [
     { value: '', label: t('jobs_all_sources') },
     ...sources.map(s => ({ value: s, label: sourceLabel(s) })),
-  ];
-  const statusOptions = [
+  ], [sources, t]);
+  const statusOptions = useMemo(() => [
     { value: '', label: t('jobs_all_statuses') },
     ...statuses.map(s => ({ value: s, label: statusLabel(s) })),
-  ];
-  const typeOptions = [
+  ], [statuses, t]);
+  const typeOptions = useMemo(() => [
     { value: '', label: t('jobs_all_types') },
     ...types.map(ty => ({ value: ty, label: jobTypeLabel(ty) })),
-  ];
-  const cityOptions = [
+  ], [types, t]);
+  const cityOptions = useMemo(() => [
     { value: '', label: t('jobs_all_cities') },
     ...cities.map(c => ({ value: c, label: c })),
-  ];
+  ], [cities, t]);
   const sortOptions = [
     { value: 'match_score', label: t('jobs_sort_match') },
     { value: 'date', label: t('jobs_sort_date') },

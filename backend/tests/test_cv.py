@@ -296,3 +296,18 @@ def test_deleting_cv_does_not_delete_application_history(client, db_session):
     survived = db_session.query(Application).filter(Application.id == app_id).first()
     assert survived is not None
     assert survived.cv_id is None
+
+
+def test_list_cvs_supports_limit_and_offset(client, db_session):
+    """CV listeleme ucu daha önce tüm satırları sınırsız döndürüyordu.
+    Artık limit/offset destekliyor (varsayılanları mevcut davranışı korur)."""
+    headers = _auth_headers(client, "cv-pagination@example.com")
+    for i in range(5):
+        _seed_cv(db_session, "cv-pagination@example.com", title=f"CV {i}")
+
+    page1 = client.get("/api/cvs/", params={"limit": 2, "offset": 0}, headers=headers).json()
+    page2 = client.get("/api/cvs/", params={"limit": 2, "offset": 2}, headers=headers).json()
+
+    assert len(page1) == 2
+    assert len(page2) == 2
+    assert {c["id"] for c in page1}.isdisjoint({c["id"] for c in page2})

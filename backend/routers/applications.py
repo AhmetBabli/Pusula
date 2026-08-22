@@ -79,6 +79,8 @@ class ApplicationOut(BaseModel):
 @router.get("/", response_model=List[ApplicationOut])
 def list_applications(
     status: str = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
@@ -97,7 +99,7 @@ def list_applications(
     if status:
         q = q.filter(Application.status == status)
 
-    records = q.all()
+    records = q.offset(offset).limit(limit).all()
     result = []
 
     # Takip nudge'ı için eşik: gerçekten gönderilmiş (sent), henüz yanıt

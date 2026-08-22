@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr, field_validator
@@ -88,13 +88,20 @@ def get_accounts(db: Session = Depends(get_db), current_user: UserProfile = Depe
     return db.query(EmailAccount).filter(EmailAccount.user_id == current_user.id).all()
 
 @router.get("/items", response_model=List[InboxItemOut])
-def get_inbox_items(db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
+def get_inbox_items(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
     """List the current user's career items found by the AI agent."""
     items = (
         db.query(InboxItem)
         .join(EmailAccount, InboxItem.account_id == EmailAccount.id)
         .filter(EmailAccount.user_id == current_user.id)
         .order_by(InboxItem.received_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return items

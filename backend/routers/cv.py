@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 from datetime import datetime
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -112,9 +112,21 @@ async def background_ats_analysis(cv_id: int, api_key: str = ""):
 # === Endpoints ===
 
 @router.get("/", response_model=List[CVOut])
-def list_cvs(db: Session = Depends(get_db), current_user: UserProfile = Depends(get_current_user)):
+def list_cvs(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
     """Kullanıcının kendi CV'lerini listele."""
-    return db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.created_at.desc()).all()
+    return (
+        db.query(CV)
+        .filter(CV.user_id == current_user.id)
+        .order_by(CV.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 def _get_own_cv_or_404(db: Session, cv_id: int, current_user: UserProfile) -> CV:
     cv = get_or_404(db, CV, cv_id, "CV")

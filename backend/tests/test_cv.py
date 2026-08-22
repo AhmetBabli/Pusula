@@ -12,6 +12,8 @@ from sqlalchemy.orm import sessionmaker
 from backend.tests.conftest import register_and_login
 from backend.models.user import UserProfile
 from backend.models.cv import CV
+from backend.models.job import Job
+from backend.models.application import Application
 
 
 def _auth_headers(client, email="cvtest@example.com"):
@@ -267,3 +269,30 @@ def test_ats_analyze_updates_score_via_background_task(client, db_session, db_en
     assert updated["ats_score"] == 82
     assert updated["strengths"] == ["Python"]
     assert updated["target_keywords"] == ["Docker", "AWS"]
+
+
+def test_deleting_cv_does_not_delete_application_history(client, db_session):
+    """Regresyon testi: Application.cv_id eskiden NOT NULL + ON DELETE CASCADE
+    idi — bir CV silindiğinde o CV'yle yapılmış tüm başvuru geçmişi de kalıcı
+    olarak siliniyordu. Artık ON DELETE SET NULL: başvuru kalır, sadece
+    cv_id'si NULL olur (audit'in numaralandırılmamış bir Orta bulgusu)."""
+    headers = _auth_headers(client, "cv-delete-keeps-app@example.com")
+    user = db_session.query(UserProfile).filter(UserProfile.email == "cv-delete-keeps-app@example.com").first()
+    cv = _seed_cv(db_session, "cv-delete-keeps-app@example.com")
+
+    job = Job(source="manual", source_url="https://example.com/job/cv-delete-test", title="Test İlanı", company="Test A.Ş.")
+    db_session.add(job)
+    db_session.flush()
+
+    app = Application(user_id=user.id, job_id=job.id, cv_id=cv.id, status="draft")
+    db_session.add(app)
+    db_session.commit()
+    app_id = app.id
+
+    res = client.delete(f"/api/cvs/{cv.id}", headers=headers)
+    assert res.status_code == 200, res.text
+
+    db_session.expire_all()
+    survived = db_session.query(Application).filter(Application.id == app_id).first()
+    assert survived is not None
+    assert survived.cv_id is None

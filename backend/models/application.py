@@ -10,9 +10,13 @@ class Application(Base):
     # 🚀 Başvuru sahibi: kullanıcı silinirse başvuruları da silinir (Cascade)
     user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # 🚀 Veritabanı Güvenliği: İlan veya CV silinirse, başvuru da otomatik silinir (Cascade)
-    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
-    cv_id = Column(Integer, ForeignKey("cvs.id", ondelete="CASCADE"), nullable=False, index=True)
+    # İlan/CV silinirse başvuru SİLİNMEZ, sadece referansı kopar (cover_letter_id
+    # ile aynı desen) — CASCADE kullanılsaydı bir kullanıcı kendi CV'sini
+    # sildiğinde o CV'yle yapılmış tüm başvuru geçmişi de kalıcı olarak
+    # kaybolurdu. Uygulama kodu (applications.py) zaten her yerde job/cv'nin
+    # None olabileceğini varsayıp ternary/guard ile ele alıyordu.
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    cv_id = Column(Integer, ForeignKey("cvs.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Durum
     status = Column(String(30), default="draft", index=True)

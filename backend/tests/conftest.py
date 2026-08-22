@@ -9,7 +9,7 @@ Gerçek dev veritabanına (kariyer_ajani.db) veya gerçek dış servislere
 - Rate limiter durumu her testten önce sıfırlanır, testler birbirini etkilemesin.
 """
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
@@ -26,7 +26,17 @@ def db_engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    from backend.models import user, cv, job, job_user_state, event, event_user_state, application, inbox, outreach  # noqa: F401
+
+    # database.py'deki gerçek engine'de olduğu gibi — SQLite'ta foreign key
+    # zorlaması varsayılan olarak kapalı, bu pragma açılmadan modellerdeki
+    # ondelete="CASCADE"/"SET NULL" testlerde sessizce hiçbir şey yapmaz.
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    from backend.models import user, cv, job, job_user_state, event as event_model, event_user_state, application, inbox, outreach  # noqa: F401
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)

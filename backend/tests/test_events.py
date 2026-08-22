@@ -1,10 +1,11 @@
 """
 Etkinlikler (events router) testleri.
 
-Job'ların aksine etkinlikler kullanıcılar arasında paylaşılan tek bir
-katalogdur (router'ın kendi docstring'i de bunu belirtiyor) — bu yüzden
-burada bir kullanıcı-izolasyonu testi yok, sadece CRUD + filtre + geçersiz
-durum reddi doğrulanıyor.
+Etkinlik KATALOĞU (başlık/açıklama/tarih vb.) kullanıcılar arasında
+paylaşılır, ama DURUM (interested/registered/...) artık EventUserState ile
+kullanıcıya özel (audit item #12 — JobUserState'in Job için çözdüğü sınıf
+hatanın aynısı Event.status için de vardı: herhangi bir kullanıcının PATCH'i
+herkesin durumunu eziyordu).
 """
 from backend.tests.conftest import register_and_login
 
@@ -77,3 +78,20 @@ def test_update_event_status_rejects_invalid_value(client):
 
     res = client.patch(f"/api/events/{event['id']}/status", json={"status": "cok_alakasiz_bir_durum"}, headers=headers)
     assert res.status_code == 400
+
+
+def test_event_status_is_isolated_per_user(client):
+    """Regresyon testi: iki kullanıcı aynı etkinliği farklı durumlara
+    işaretleyebilmeli, biri diğerini ezmemeli (audit item #12)."""
+    headers_a = _auth_headers(client, "event-user-a@example.com")
+    headers_b = _auth_headers(client, "event-user-b@example.com")
+
+    event = _create_event(client, headers_a).json()
+
+    client.patch(f"/api/events/{event['id']}/status", json={"status": "registered"}, headers=headers_a)
+    client.patch(f"/api/events/{event['id']}/status", json={"status": "skipped"}, headers=headers_b)
+
+    view_a = client.get(f"/api/events/{event['id']}", headers=headers_a).json()
+    view_b = client.get(f"/api/events/{event['id']}", headers=headers_b).json()
+    assert view_a["status"] == "registered"
+    assert view_b["status"] == "skipped"

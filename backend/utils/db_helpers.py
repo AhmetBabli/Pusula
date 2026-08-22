@@ -39,3 +39,18 @@ def get_or_create_job_state(db: Session, user_id: int, job_id: int):
         db.add(state)
         db.flush()
     return state
+
+
+def get_or_create_event_state(db: Session, user_id: int, event_id: int):
+    """Bir etkinliğin bu kullanıcı için durumunu (EventUserState) getirir, yoksa
+    varsayılan değerlerle oluşturur — get_or_create_job_state ile aynı desen."""
+    from backend.models.event_user_state import EventUserState
+
+    state = db.query(EventUserState).filter(
+        EventUserState.user_id == user_id, EventUserState.event_id == event_id
+    ).first()
+    if not state:
+        state = EventUserState(user_id=user_id, event_id=event_id)
+        db.add(state)
+        db.flush()
+    return state

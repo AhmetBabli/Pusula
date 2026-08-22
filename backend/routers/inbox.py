@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime
 import asyncio
 import logging
@@ -43,6 +43,14 @@ class InboxItemOut(BaseModel):
     received_at: datetime
     is_read: bool
     is_applied: bool
+
+    # body_summary DB'de nullable (Text) — NULL bir satır bu ucu kalıcı
+    # olarak 500'e düşürmesin diye (bkz. work_experiences/certificates'te
+    # yaşanan aynı sınıf bug).
+    @field_validator("body_summary", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v):
+        return v if v is not None else ""
 
     class Config:
         from_attributes = True

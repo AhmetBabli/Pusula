@@ -16,6 +16,7 @@ from backend.models.user import UserProfile
 from backend.models.job import Job
 from backend.models.job_user_state import JobUserState
 from backend.models.event import Event
+from backend.models.event_user_state import EventUserState
 from backend.auth import hash_password
 
 SEED_USER_EMAIL = "ahmet@dogus.edu.tr"
@@ -128,7 +129,6 @@ def seed():
                     event_date=now_utc + timedelta(days=7),
                     registration_deadline=now_utc + timedelta(days=2),
                     relevance_score=95.0,
-                    status="found",
                 ),
                 Event(
                     source="youthall",
@@ -143,10 +143,15 @@ def seed():
                     event_date=now_utc + timedelta(days=25),
                     registration_deadline=now_utc + timedelta(days=20),
                     relevance_score=100.0,
-                    status="found",
                 )
             ]
             db.add_all(events)
+            db.flush()
+
+            if seed_user:
+                for event in events:
+                    db.add(EventUserState(user_id=seed_user.id, event_id=event.id, status="found"))
+
             print(f"[+] {len(events)} örnek etkinlik eklendi")
 
         db.commit()

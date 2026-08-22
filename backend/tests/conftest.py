@@ -26,7 +26,7 @@ def db_engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    from backend.models import user, cv, job, job_user_state, event, application, inbox, outreach  # noqa: F401
+    from backend.models import user, cv, job, job_user_state, event, event_user_state, application, inbox, outreach  # noqa: F401
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)

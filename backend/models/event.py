@@ -35,10 +35,10 @@ class Event(Base):
     relevance_score = Column(Float, default=0.0)       # 0-100
     relevance_reason = Column(Text, nullable=True)
 
-    # Durum
-    status = Column(String(30), default="found")
-    # found → interested → registered → attended → skipped
-
+    # Not: status BURADA yok — Event tüm kullanıcılar arasında paylaşılan bir
+    # katalog, durum ise kullanıcıya özel (bkz. EventUserState). JobUserState'in
+    # Job için çözdüğü sınıf hatanın aynısı: herhangi bir kullanıcının PATCH'i
+    # herkesin durumunu ezmesin diye.
     notes = Column(Text, nullable=True)
 
     # 🚀 Zaman fonksiyonları güncellendi

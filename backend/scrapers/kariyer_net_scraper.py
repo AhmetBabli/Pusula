@@ -120,7 +120,7 @@ class KariyerNetScraper:
             if browser:
                 try:
                     await browser.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[Scraper] browser.close() sırasında hata (önemsiz): {e}")
 
         return jobs

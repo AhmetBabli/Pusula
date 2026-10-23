@@ -97,8 +97,8 @@ async def _run_web_search(session_id: str, query: str, location: str, db_user_id
                     if not existing:
                         db.add(Job(**validated.to_job_dict()))
                         saved += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"[Agents] web_search: bir ilan kaydedilemedi, atlanıyor: {e}")
             db.commit()
 
         await push_agent_event(
@@ -146,7 +146,8 @@ async def _run_event_search(session_id: str, query: str, location: str, db_user_
                     event.relevance_reason = raw.get("relevance_reason")
                     db.add(event)
                     saved += 1
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"[Agents] event_search: bir etkinlik kaydedilemedi, atlanıyor: {e}")
                     continue
             db.commit()
 

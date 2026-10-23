@@ -40,8 +40,8 @@ async def fetch_github_repos(github_url: str) -> list[dict]:
             lang_resp = await client.get(languages_url, headers=HEADERS)
             if lang_resp.status_code == 200:
                 return list(lang_resp.json().keys())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[CvArchitect] repo dilleri alınamadı ({languages_url}): {e}")
         return []
 
     try:

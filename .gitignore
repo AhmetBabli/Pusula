@@ -71,3 +71,9 @@ dist/
 *.orig
 *.merge
 
+
+# Araç çıktıları ve yerel yedekler
+.playwright-mcp/
+.serena/
+*.db.bak_*
+zb_*.yml

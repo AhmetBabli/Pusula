@@ -5,21 +5,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../../i18n/LanguageContext';
-
-function ScoreRing({ score }: { score: number }) {
-  const pct = Math.round(score || 0);
-  const tone = pct >= 65 ? '#1E7F5C' : pct >= 45 ? '#B4740E' : 'rgb(var(--color-on-surface-variant))';
-  return (
-    <div
-      className="relative w-14 h-14 rounded-full flex items-center justify-center shrink-0"
-      style={{ background: `conic-gradient(${tone} ${pct * 3.6}deg, rgb(var(--color-surface-container-high)) 0deg)` }}
-    >
-      <div className="absolute inset-[3px] rounded-full bg-surface-container-lowest flex items-center justify-center">
-        <span className="text-sm font-bold tabular-nums" style={{ color: tone }}>{pct}%</span>
-      </div>
-    </div>
-  );
-}
+import { ScoreRing } from '../ui/ScoreRing';
 
 function DashboardView({
   stats,
@@ -83,8 +69,16 @@ function DashboardView({
             </div>
           </div>
         ) : (
-          <div className="bg-surface-container border border-outline-variant/10 rounded-2xl p-6 flex items-center justify-center text-sm text-on-surface-variant">
-            {t('dashboard_no_matches_yet')}
+          <div className="bg-surface-container border border-outline-variant/10 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 text-center">
+            <p className="text-sm text-on-surface-variant max-w-[36ch]">{t('dashboard_no_matches_yet')}</p>
+            <button
+              onClick={onDeepScan}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-container hover:bg-primary active:scale-[0.98] text-white text-sm font-semibold rounded-lg transition-all duration-150 disabled:opacity-50"
+            >
+              <Zap className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? t('dashboard_scanning') : t('dashboard_scan_jobs')}
+            </button>
           </div>
         )}
 

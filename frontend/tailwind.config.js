@@ -42,11 +42,17 @@ export default {
         "margin-mobile": "16px"
       },
       fontFamily: {
+        // Marka önceden tek fontluydu (her yerde Inter) — font-headline ve
+        // font-label class'ları uygulama genelinde zaten kullanılıyordu ama
+        // headline Inter'e eşitti (görsel fark yok) ve label hiç tanımlı
+        // değildi (sessizce hiçbir şey yapmıyordu). Tek noktadan (burada)
+        // düzeltilince component dosyalarına dokunmadan tüm uygulamaya yayılıyor.
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
-        display: ["Inter", "sans-serif"],
+        display: ["Bricolage Grotesque", "Inter", "sans-serif"],
         body: ["Inter", "sans-serif"],
-        headline: ["Inter", "sans-serif"],
+        headline: ["Bricolage Grotesque", "Inter", "sans-serif"],
+        label: ["JetBrains Mono", "monospace"],
       },
     },
   },

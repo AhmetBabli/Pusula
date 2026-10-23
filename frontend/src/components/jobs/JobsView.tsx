@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Briefcase, Search, MapPin, Building, Star, ExternalLink, Activity, AlertCircle, Compass } from 'lucide-react';
 import CyberModal from '../ui/CyberModal';
 import Dropdown from '../ui/Dropdown';
+import { ScoreRing } from '../ui/ScoreRing';
 import * as api from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
 
@@ -259,9 +260,6 @@ function JobsView({ jobs, isLoading, onJobAction }: JobsViewProps) {
           >
             <AnimatePresence>
               {filteredJobs.slice(0, visibleCount).map(job => {
-                const score = Math.round(job.match_score || 0);
-                const scoreColor = score > 70 ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : score > 40 ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20' : 'text-red-500 bg-red-500/10 border-red-500/20';
-
                 return (
                   <motion.div
                     key={job.id}
@@ -291,9 +289,7 @@ function JobsView({ jobs, isLoading, onJobAction }: JobsViewProps) {
                     </div>
 
                     <div className="flex items-center gap-4">
-                      <div className={`flex items-center justify-center px-4 py-2 rounded-md border font-bold text-lg tabular-nums ${scoreColor}`}>
-                        {score}%
-                      </div>
+                      <ScoreRing score={job.match_score || 0} size={44} />
                       <button className="px-4 py-2 rounded-md bg-outline-variant/5 hover:bg-outline-variant/10 active:scale-[0.97] text-on-surface text-sm font-label transition-all duration-150">
                         {t('jobs_detail_button')}
                       </button>
@@ -328,13 +324,7 @@ function JobsView({ jobs, isLoading, onJobAction }: JobsViewProps) {
                 <h3 className="text-xl font-headline font-semibold text-on-surface">{selectedJob.company}</h3>
                 <p className="text-sm font-body text-on-surface-variant">{selectedJob.location}</p>
               </div>
-              <div className={`flex items-center justify-center w-16 h-16 rounded-full border-4 font-bold text-xl tabular-nums ${
-                  (selectedJob.match_score || 0) > 70 ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10' :
-                  (selectedJob.match_score || 0) > 40 ? 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10' :
-                  'border-red-500/30 text-red-500 bg-red-500/10'
-                }`}>
-                {Math.round(selectedJob.match_score || 0)}%
-              </div>
+              <ScoreRing score={selectedJob.match_score || 0} size={64} />
             </div>
 
             {selectedJob.description && (

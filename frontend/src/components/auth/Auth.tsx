@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowRight, AlertCircle } from 'lucide-react';
 import { login, register, loginWithGoogle, forgotPassword } from '../../services/api';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { LogoMark } from '../ui/Logo';
+import { CompassField } from '../ui/CompassField';
 
 interface AuthUser {
   id: number;
@@ -204,6 +206,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-surface text-on-surface px-6 relative overflow-hidden">
+      <CompassField />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -212,7 +215,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       >
         <div className="text-center mb-10 flex flex-col items-center">
           <div className="w-12 h-12 rounded-xl bg-primary-container/10 border border-primary-container/20 flex items-center justify-center mb-4">
-            <ShieldCheck className="w-6 h-6 text-primary" />
+            <motion.div
+              animate={{ rotate: [0, -14, 10, -4, 0] }}
+              transition={{ duration: 3.2, repeat: Infinity, repeatDelay: 1, ease: "easeInOut" }}
+            >
+              <LogoMark size={24} />
+            </motion.div>
           </div>
           <h1 className="text-2xl font-headline font-semibold tracking-wide text-on-surface mb-2">{t('app_title')}</h1>
           <p className="text-sm font-label text-on-surface-variant">

@@ -36,13 +36,18 @@ function VariantPerformancePanel({ data, t }) {
   const maxScore = Math.max(1, ...data.map((d) => d.avg_match_score || 0));
 
   return (
-    <div className="bg-surface-container border border-outline-variant/10 rounded-xl p-5 md:p-6 flex flex-col gap-4">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="bg-surface-container border border-outline-variant/10 rounded-xl p-5 md:p-6 flex flex-col gap-4"
+    >
       <div className="flex items-center gap-2">
         <TrendingUp className="w-4 h-4 text-primary" />
         <h3 className="text-sm font-label font-semibold text-on-surface">{t('cv_performance_title')}</h3>
       </div>
       <div className="flex flex-col gap-3">
-        {data.map((row) => {
+        {data.map((row, idx) => {
           const label = VARIANT_LABEL_KEYS[row.variant_type] ? t(VARIANT_LABEL_KEYS[row.variant_type]) : row.variant_type;
           const hasScore = row.matched_job_count > 0;
           return (
@@ -50,9 +55,11 @@ function VariantPerformancePanel({ data, t }) {
               <span className="text-sm font-label text-on-surface w-32 shrink-0 truncate">{label}</span>
               <div className="flex-1 h-2 rounded-full bg-surface-container-highest overflow-hidden">
                 {hasScore && (
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${Math.max(4, (row.avg_match_score / maxScore) * 100)}%` }}
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.max(4, (row.avg_match_score / maxScore) * 100)}%` }}
+                    transition={{ duration: 0.8, delay: 0.2 + idx * 0.1, ease: [0.22, 1, 0.36, 1] }}
                   />
                 )}
               </div>
@@ -76,7 +83,7 @@ function VariantPerformancePanel({ data, t }) {
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 }
 

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { FileText, Radar, Mail, ArrowRight } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { LogoMark } from '../ui/Logo';
+import { CompassField } from '../ui/CompassField';
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -45,6 +46,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-surface text-on-surface px-6 py-12 relative overflow-hidden">
+      <CompassField />
       <div className="relative z-10 max-w-5xl w-full flex flex-col items-center text-center">
         
         <motion.div
@@ -85,16 +87,26 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           {t('onboarding_intro')}
         </motion.p>
 
-        <motion.div 
+        <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-16"
+          className="relative grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-16"
         >
+          {/* Bu üç kart aslında paralel özellikler değil, gerçek bir akış:
+              CV yükle → radar tarasın → gelen kutusu sonucu bildirsin. Sıra
+              numaralarını ve aralarındaki "sinyal" çizgisini bu yüzden
+              gösteriyoruz — süs değil, akışın kendisi. */}
+          <div className="onboarding-flow-line hidden md:block absolute left-[16.66%] right-[16.66%] top-[56px] h-px pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-outline-variant/25 to-transparent" />
+            <div className="onboarding-flow-pulse absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgb(var(--color-primary)/0.7)]" />
+          </div>
+
           {features.map((f, i) => {
             const Icon = f.icon;
             return (
-              <motion.div key={i} variants={itemVariants} className="group bg-surface-container border border-outline-variant/10 p-8 rounded-2xl text-left transition-all duration-500 hover:-translate-y-2 hover:border-outline-variant/20 hover:shadow-xl hover:bg-surface-container-highest cursor-default">
+              <motion.div key={i} variants={itemVariants} className="group relative bg-surface-container border border-outline-variant/10 p-8 rounded-2xl text-left transition-all duration-500 hover:-translate-y-2 hover:border-outline-variant/20 hover:shadow-xl hover:bg-surface-container-highest cursor-default">
+                <span className="block font-label text-[11px] tracking-widest text-on-surface-variant/40 mb-3">0{i + 1}</span>
                 <div className="w-12 h-12 rounded-xl bg-primary-container/10 border border-primary-container/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500">
                   <Icon className="w-6 h-6 text-primary" />
                 </div>
@@ -105,6 +117,19 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               </motion.div>
             );
           })}
+
+          <style>{`
+            @keyframes onboarding-flow-pulse {
+              0% { left: 0%; opacity: 0; }
+              10% { opacity: 1; }
+              90% { opacity: 1; }
+              100% { left: 100%; opacity: 0; }
+            }
+            .onboarding-flow-pulse { animation: onboarding-flow-pulse 3.6s ease-in-out infinite; }
+            @media (prefers-reduced-motion: reduce) {
+              .onboarding-flow-pulse { animation: none; left: 50%; opacity: .6; }
+            }
+          `}</style>
         </motion.div>
 
         <motion.button 

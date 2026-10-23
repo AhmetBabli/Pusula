@@ -40,12 +40,27 @@ function CopyButton({ text, label }) {
 // başlık + kısa açıklama + gerçek bir buton içeren, kendi başına bir "özellik
 // kartı" gibi duran ortak bir bileşen.
 function FeaturePrompt({ icon: Icon, title, description, actionLabel, onAction, loading = false }) {
+  // Bu kart, kullanıcının henüz denemediği yeni bir özelliğin (referans
+  // bulucu, takip taslağı, mektup düzenleme) ilk daveti — o yüzden ikon tek
+  // seferlik yumuşak bir "pop" ile beliriyor. Sürekli yanıp sönen bir halka
+  // koymadık: bir başvuru kartında bu üçü aynı anda görünebiliyor, sürekli
+  // hareket eden birden fazla ikon dikkat dağıtır.
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-md bg-primary-container/5 border border-primary-container/20">
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-md bg-primary-container/5 border border-primary-container/20"
+    >
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-md bg-primary-container/15 flex items-center justify-center shrink-0">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.1 }}
+          className="w-9 h-9 rounded-md bg-primary-container/15 flex items-center justify-center shrink-0"
+        >
           <Icon className="w-4 h-4 text-primary" />
-        </div>
+        </motion.div>
         <div>
           <div className="text-sm font-label font-semibold text-on-surface">{title}</div>
           <div className="text-xs font-body text-on-surface-variant mt-0.5 leading-relaxed">{description}</div>
@@ -59,7 +74,7 @@ function FeaturePrompt({ icon: Icon, title, description, actionLabel, onAction, 
       >
         {loading ? '...' : actionLabel}
       </button>
-    </div>
+    </motion.div>
   );
 }
 
@@ -258,7 +273,13 @@ function ReferralBox({ appId, candidates, onFind, labels, copyLabel }) {
         <span className="text-xs font-body text-on-surface-variant italic">{labels.empty}</span>
       )}
       {candidates?.map((c, idx) => (
-        <div key={idx} className="flex flex-col gap-2 p-3 rounded-md bg-surface-container border border-outline-variant/10">
+        <motion.div
+          key={idx}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: idx * 0.08 }}
+          className="flex flex-col gap-2 p-3 rounded-md bg-surface-container border border-outline-variant/10"
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-sm font-label font-medium text-on-surface truncate">{c.name}</div>
@@ -277,7 +298,7 @@ function ReferralBox({ appId, candidates, onFind, labels, copyLabel }) {
             </a>
           )}
           <p className="text-xs font-body text-on-surface-variant leading-relaxed">{c.message_draft}</p>
-        </div>
+        </motion.div>
       ))}
     </div>
   );
@@ -320,9 +341,14 @@ function FollowupBox({ appId, onDraft, onSend, onMarkResponded, labels }) {
 
   if (sent) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+        className="flex items-center gap-2 px-4 py-3 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm"
+      >
         <CheckCircle className="w-4 h-4 shrink-0" /> {labels.sentConfirm}
-      </div>
+      </motion.div>
     );
   }
 
@@ -330,7 +356,16 @@ function FollowupBox({ appId, onDraft, onSend, onMarkResponded, labels }) {
     <div className="flex flex-col gap-3 p-4 rounded-md bg-primary-container/5 border border-primary-container/20">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
-          <Clock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          {/* Bu kutu tipik olarak listede en fazla bir-iki başvuruda görünüyor
+              (10 gündür yanıtsız kalma şartı) — o yüzden FeaturePrompt'un
+              aksine burada sürekli bir nabız güvenli: "zaman işliyor" fikrini
+              süs değil, gerçek anlamıyla taşıyor. */}
+          <motion.div
+            animate={{ opacity: [0.6, 1, 0.6] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <Clock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          </motion.div>
           <span className="text-sm font-body text-on-surface">{labels.nudge}</span>
         </div>
         <button

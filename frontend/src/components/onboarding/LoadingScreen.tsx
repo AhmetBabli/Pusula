@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { LogoMark } from '../ui/Logo';
+import { CompassField } from '../ui/CompassField';
 
 interface LoadingScreenProps {
   onComplete: () => void;
@@ -19,6 +20,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen bg-surface text-on-surface overflow-hidden">
+      <CompassField />
       {/* Marka rengiyle yumuşak, ortalanmış bir ışıma */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(var(--color-primary)/0.10),transparent_60%)]" />
 
